@@ -38,6 +38,8 @@ const STATUS_ORDER = ["not_started", "in_progress", "done"];
 const STATUS_LABEL = { not_started: "Not started", in_progress: "In progress", done: "Done" };
 const STATUS_COLOR = { not_started: C.sub, in_progress: C.brass, done: C.good };
 const nextStatus = (s) => STATUS_ORDER[(STATUS_ORDER.indexOf(s) + 1) % STATUS_ORDER.length];
+const STATUS_WEIGHT = { not_started: 0, in_progress: 0.5, done: 1 };
+const weightedPct = (items) => Math.round((items.reduce((sum, i) => sum + STATUS_WEIGHT[i.status], 0) / items.length) * 100);
 
 /* -------------------------------- seed data -------------------------------- */
 const BUSINESSES = [
@@ -230,7 +232,7 @@ function SetupProgress({ onboarding, setOnboarding }) {
         {BUSINESSES.map((b) => {
           const items = onboarding[b.id];
           const done = items.filter((i) => i.status === "done").length;
-          const pct = Math.round((done / items.length) * 100);
+          const pct = weightedPct(items);
           return (
             <Card key={b.id} style={{ padding: 18 }}>
               <div style={{ height: 4, borderRadius: 4, background: b.color, marginBottom: 14, marginTop: -4, marginLeft: -4, marginRight: -4 }} />
@@ -636,12 +638,18 @@ export default function WMXTracker() {
     }
   };
 
+  // autosave: once things settle for a moment after an edit, save without
+  // waiting for the user to click the button, so a refresh sees it too.
+  useEffect(() => {
+    if (!dirty) return;
+    const timer = setTimeout(() => { handleSave(); }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, dirty]);
+
   const portfolioPct = useMemo(() => {
-    const pcts = BUSINESSES.map((b) => {
-      const items = data.onboarding[b.id];
-      return items.filter((i) => i.status === "done").length / items.length;
-    });
-    return Math.round((pcts.reduce((a, c) => a + c, 0) / pcts.length) * 100);
+    const pcts = BUSINESSES.map((b) => weightedPct(data.onboarding[b.id]));
+    return Math.round(pcts.reduce((a, c) => a + c, 0) / pcts.length);
   }, [data.onboarding]);
 
   const openTicketCount = data.tickets.filter((t) => t.status !== "resolved").length;
