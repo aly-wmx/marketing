@@ -5,6 +5,7 @@ A real, running copy of the WMX tracker with:
 - **Realtime sync** — when someone else saves, you see it live (or get asked before it overwrites your unsaved edits)
 - **Per-user attribution** — every save records who made it ("Last edited by Aly · 2:14 PM")
 - **Ticket assignment notifications** — assign a new ticket to a teammate and they get a live in-app banner (plus a desktop notification if their tab is in the background and they've allowed it)
+- **Social Media Hub** — a tab for tracking follower counts per brand/platform, backed by the `brands`/`platforms`/`weekly_snapshots` tables already provisioned in Supabase (manual entry for now, week-over-week deltas, ready for an automated API sync later)
 
 ## 1. Create a Supabase project (free tier is fine)
 
@@ -102,5 +103,5 @@ wmx-tracker-local/
 └── src/
     ├── main.jsx
     ├── supabaseClient.js
-    └── App.jsx            — tabs, identity prompt, realtime subscription, Save
+    └── App.jsx            — tabs (including Social Media Hub), identity prompt, realtime subscription, Save
 ```

@@ -3,6 +3,7 @@ import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
   ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
+  Share2, TrendingUp, TrendingDown,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -49,6 +50,11 @@ const BUSINESSES = [
   { id: "tf", name: "Twofold", model: "Destination", color: C.pine, soft: C.pineSoft },
 ];
 const bizById = (id) => BUSINESSES.find((b) => b.id === id);
+
+// Maps this app's short business ids to the `brands.slug` values already
+// seeded in Supabase (brands/platforms/weekly_snapshots — set up for social
+// stats tracking, manual entry for now until an API sync is wired in).
+const BRAND_SLUG_BY_BIZ = { wm: "watermark", mn: "manolo", gh: "garrison", tf: "twofold" };
 
 const initOnboarding = () => {
   const items = {
@@ -569,12 +575,181 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   );
 }
 
+function SocialPlatformRow({ platform, latest, previous, onLog }) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const delta = latest && previous ? latest.followers - previous.followers : null;
+
+  const submit = async () => {
+    const n = parseInt(value, 10);
+    if (!Number.isFinite(n) || n < 0) return;
+    setSaving(true);
+    await onLog(n);
+    setSaving(false);
+    setValue("");
+  };
+
+  return (
+    <div style={{ padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: platform.color_hex || C.sub }} />
+          <span className="wmx-body" style={{ fontSize: 12.5, color: C.ink, fontWeight: 600 }}>{platform.name}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span className="wmx-display" style={{ fontSize: 18, color: C.ink }}>{latest ? latest.followers.toLocaleString() : "—"}</span>
+          {delta !== null && delta !== 0 && (
+            <span className="wmx-body" style={{ fontSize: 11, fontWeight: 600, color: delta > 0 ? C.good : C.warn, display: "flex", alignItems: "center", gap: 2 }}>
+              {delta > 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+              {Math.abs(delta).toLocaleString()}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, marginTop: 2 }}>
+        {latest ? `as of ${latest.week_ending}` : "no data logged yet"}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New count" type="number" min="0"
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          className="wmx-body wmx-focus" style={{ width: 110, padding: "5px 8px", border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12 }} />
+        <button onClick={submit} disabled={!value || saving} className="wmx-body wmx-focus"
+          style={{ fontSize: 11.5, fontWeight: 600, padding: "5px 10px", borderRadius: 6, border: "none", cursor: value ? "pointer" : "default", background: value ? C.ink : C.line, color: value ? "#fff" : C.sub }}>
+          {saving ? "…" : "Log"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SocialTab() {
+  const [brands, setBrands] = useState([]);
+  const [platforms, setPlatforms] = useState([]);
+  const [snapshots, setSnapshots] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ data: brandRows }, { data: platformRows }, { data: snapshotRows }] = await Promise.all([
+          supabase.from("brands").select("id, name, slug").order("name"),
+          supabase.from("platforms").select("id, name, color_hex").order("name"),
+          supabase.from("weekly_snapshots").select("id, brand_id, platform_id, week_ending, followers, source, updated_at"),
+        ]);
+        if (!cancelled) {
+          setBrands(brandRows || []);
+          setPlatforms(platformRows || []);
+          setSnapshots(snapshotRows || []);
+        }
+      } catch (e) {
+        console.warn("Could not load social stats:", e.message ?? e);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // realtime: another tab logging a count (or a future automated sync) shows up live
+  useEffect(() => {
+    const channel = supabase
+      .channel("weekly_snapshots_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "weekly_snapshots" }, (payload) => {
+        setSnapshots((prev) => {
+          if (payload.eventType === "DELETE") return prev.filter((s) => s.id !== payload.old.id);
+          return [...prev.filter((s) => s.id !== payload.new.id), payload.new];
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const historyByKey = useMemo(() => {
+    const map = {};
+    snapshots.forEach((s) => {
+      const key = `${s.brand_id}:${s.platform_id}`;
+      (map[key] ||= []).push(s);
+    });
+    Object.values(map).forEach((arr) => arr.sort((a, b) => b.week_ending.localeCompare(a.week_ending)));
+    return map;
+  }, [snapshots]);
+
+  const totalFollowers = useMemo(
+    () => Object.values(historyByKey).reduce((sum, arr) => sum + (arr[0]?.followers || 0), 0),
+    [historyByKey]
+  );
+
+  const logSnapshot = useCallback(async (brandId, platformId, followers) => {
+    const weekEnding = new Date().toISOString().slice(0, 10);
+    try {
+      const { error } = await supabase
+        .from("weekly_snapshots")
+        .upsert(
+          { brand_id: brandId, platform_id: platformId, week_ending: weekEnding, followers, source: "manual" },
+          { onConflict: "brand_id,platform_id,week_ending" }
+        )
+        .select();
+      if (error) throw error;
+    } catch (e) {
+      console.error("Could not log follower count:", e.message ?? e);
+    }
+  }, []);
+
+  return (
+    <>
+      <PageHeader eyebrow="Weekly tracking · manual for now, ready for API sync later" title="Social Media Hub" right={
+        <Card style={{ padding: "10px 18px" }}>
+          <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6 }}>Total followers</div>
+          <div className="wmx-display" style={{ fontSize: 22, color: C.brass }}>{totalFollowers.toLocaleString()}</div>
+        </Card>
+      } />
+      {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading social stats…</div>}
+      {loaded && brands.length === 0 && (
+        <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub }}>
+          No brands/platforms found in Supabase yet — nothing to show here.
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 16 }}>
+        {BUSINESSES.map((b) => {
+          const brandRow = brands.find((row) => row.slug === BRAND_SLUG_BY_BIZ[b.id]);
+          return (
+            <Card key={b.id} style={{ padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: b.color }} />
+                <span className="wmx-display" style={{ fontSize: 15, color: C.ink }}>{b.name}</span>
+              </div>
+              {!brandRow && (
+                <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub, marginTop: 8 }}>Not set up in Supabase yet.</div>
+              )}
+              {brandRow && platforms.map((p) => {
+                const key = `${brandRow.id}:${p.id}`;
+                const history = historyByKey[key] || [];
+                return (
+                  <SocialPlatformRow
+                    key={p.id}
+                    platform={p}
+                    latest={history[0] || null}
+                    previous={history[1] || null}
+                    onLog={(followers) => logSnapshot(brandRow.id, p.id, followers)}
+                  />
+                );
+              })}
+            </Card>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 /* --------------------------------- app shell -------------------------------- */
 const TABS = [
   { id: "setup", label: "Setup Progress", icon: ListChecks },
   { id: "team", label: "Team", icon: Users },
   { id: "stack", label: "Stack", icon: Layers },
   { id: "kpis", label: "KPIs", icon: BarChart3 },
+  { id: "social", label: "Social Media Hub", icon: Share2 },
   { id: "saas", label: "SaaS & Billing", icon: CreditCard },
   { id: "accounts", label: "Accounts & Logins", icon: KeyRound },
   { id: "tickets", label: "Tickets", icon: Inbox },
@@ -938,6 +1113,7 @@ export default function WMXTracker() {
           {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} />}
           {tab === "stack" && <StackTab stack={STACK} />}
           {tab === "kpis" && <KpiTab kpis={data.kpis} setKpis={setKpis} />}
+          {tab === "social" && <SocialTab />}
           {tab === "saas" && <SaasTab saas={SAAS} />}
           {tab === "accounts" && <AccountsTab accounts={data.accounts} setAccounts={setAccounts} />}
           {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} />}
