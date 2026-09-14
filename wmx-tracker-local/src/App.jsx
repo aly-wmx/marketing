@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
@@ -140,10 +140,10 @@ const SAAS = [
 ];
 
 const initAccounts = () => [
-  { id: "a1", biz: "wm", platform: "Instagram", username: "", password: "", notes: "" },
-  { id: "a2", biz: "mn", platform: "Google Business Profile", username: "", password: "", notes: "Video verification pending" },
-  { id: "a3", biz: "gh", platform: "GoHighLevel sub-account", username: "", password: "", notes: "" },
-  { id: "a4", biz: "tf", platform: "TikTok", username: "", password: "", notes: "" },
+  { id: "a1", biz: "wm", platform: "Instagram", username: "@watermark_tampa", password: "correcthorsebattery", notes: "" },
+  { id: "a2", biz: "mn", platform: "Google Business Profile", username: "manolo.roofing@gmail.com", password: "roofingpw2026", notes: "Video verification pending" },
+  { id: "a3", biz: "gh", platform: "GoHighLevel sub-account", username: "gh-admin", password: "gh-pw-2026", notes: "" },
+  { id: "a4", biz: "tf", platform: "TikTok", username: "@twofold.tampa", password: "twofoldpw", notes: "" },
 ];
 
 const initTickets = () => [
@@ -163,6 +163,17 @@ function seedState() {
     tickets: initTickets(),
   };
 }
+
+// Guards against a corrupted/partial saved payload silently breaking the
+// progress math (e.g. a stale save from an older version of this tool).
+function isValidOnboarding(onboarding) {
+  if (!onboarding || typeof onboarding !== "object") return false;
+  return BUSINESSES.every((b) => Array.isArray(onboarding[b.id]) && onboarding[b.id].length > 0
+    && onboarding[b.id].every((item) => item && typeof item.status === "string" && STATUS_ORDER.includes(item.status)));
+}
+
+const USER_NAME_KEY = "wmx-user-name";
+const KNOWN_TEAM_NAMES = ["You", "Avery", "Aly", "Brad", "Kenny", "Jeff"];
 
 /* --------------------------------- helpers --------------------------------- */
 function Pill({ children, color, bg }) {
@@ -566,6 +577,19 @@ export default function WMXTracker() {
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const [lastSaved, setLastSaved] = useState(null);
+  const [lastEditedBy, setLastEditedBy] = useState(null);
+  const [userName, setUserName] = useState(() => localStorage.getItem(USER_NAME_KEY) || "");
+  const [nameDraft, setNameDraft] = useState("");
+  const [remoteBanner, setRemoteBanner] = useState(null); // { by, at } when a remote save lands while dirty
+  const dirtyRef = useRef(dirty);
+  useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
+
+  const chooseName = (name) => {
+    const clean = name.trim();
+    if (!clean) return;
+    localStorage.setItem(USER_NAME_KEY, clean);
+    setUserName(clean);
+  };
 
   // load persisted state on mount
   useEffect(() => {
@@ -574,12 +598,17 @@ export default function WMXTracker() {
       try {
         const { data: row, error } = await supabase
           .from("tracker_state")
-          .select("data")
+          .select("data, updated_by, updated_at")
           .eq("id", "default")
           .single();
         if (error) throw error;
         if (!cancelled && row?.data && Object.keys(row.data).length > 0) {
-          setData((prev) => ({ ...prev, ...row.data }));
+          setData((prev) => ({
+            ...prev,
+            ...row.data,
+            onboarding: isValidOnboarding(row.data.onboarding) ? row.data.onboarding : prev.onboarding,
+          }));
+          if (row.updated_by) setLastEditedBy({ by: row.updated_by, at: row.updated_at });
         }
       } catch (e) {
         // no saved row yet, or Supabase not configured — keep seed defaults
@@ -590,6 +619,30 @@ export default function WMXTracker() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // realtime: live-merge changes saved by other users, without clobbering unsaved local edits
+  useEffect(() => {
+    const channel = supabase
+      .channel("tracker_state_changes")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tracker_state", filter: "id=eq.default" },
+        (payload) => {
+          const incoming = payload.new;
+          if (!incoming || incoming.updated_by === userName) return; // ignore our own save echoing back
+          setLastEditedBy({ by: incoming.updated_by, at: incoming.updated_at });
+          if (dirtyRef.current) {
+            // don't silently overwrite unsaved local changes — let the user decide
+            setRemoteBanner({ by: incoming.updated_by, at: incoming.updated_at });
+          } else if (isValidOnboarding(incoming.data?.onboarding)) {
+            setData((prev) => ({ ...prev, ...incoming.data }));
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userName]);
 
   const markDirty = useCallback(() => setDirty(true), []);
 
@@ -621,19 +674,31 @@ export default function WMXTracker() {
   const handleSave = async () => {
     setSaveState("saving");
     try {
+      const nowIso = new Date().toISOString();
       const { error } = await supabase
         .from("tracker_state")
-        .upsert({ id: "default", data, updated_at: new Date().toISOString() });
+        .upsert({ id: "default", data, updated_by: userName || "Unknown", updated_at: nowIso });
       if (error) throw error;
       setDirty(false);
       setSaveState("saved");
       setLastSaved(new Date());
+      setLastEditedBy({ by: userName || "Unknown", at: nowIso });
+      setRemoteBanner(null);
       setTimeout(() => setSaveState("idle"), 1800);
     } catch (e) {
       console.error("Save to Supabase failed:", e.message ?? e);
       setSaveState("error");
       setTimeout(() => setSaveState("idle"), 2500);
     }
+  };
+
+  const reloadFromRemote = async () => {
+    const { data: row } = await supabase.from("tracker_state").select("data, updated_by, updated_at").eq("id", "default").single();
+    if (row?.data) {
+      setData((prev) => ({ ...prev, ...row.data, onboarding: isValidOnboarding(row.data.onboarding) ? row.data.onboarding : prev.onboarding }));
+      setDirty(false);
+    }
+    setRemoteBanner(null);
   };
 
   const portfolioPct = useMemo(() => {
@@ -645,6 +710,37 @@ export default function WMXTracker() {
   }, [data.onboarding]);
 
   const openTicketCount = data.tickets.filter((t) => t.status !== "resolved").length;
+
+  if (!userName) {
+    return (
+      <div className="wmx-body" style={{ minHeight: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <style>{FONTS}</style>
+        <Card style={{ padding: 28, maxWidth: 360, width: "100%" }}>
+          <div className="wmx-display" style={{ fontSize: 18, color: C.ink, marginBottom: 6 }}>Who's this?</div>
+          <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
+            Used to label your changes for the team (e.g. "Aly updated 2 min ago"). Stored only in this browser.
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {KNOWN_TEAM_NAMES.map((n) => (
+              <button key={n} onClick={() => chooseName(n)} className="wmx-body wmx-focus"
+                style={{ fontSize: 12, padding: "6px 12px", borderRadius: 999, border: `1px solid ${C.line}`, background: "transparent", cursor: "pointer" }}>
+                {n}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Or type your name"
+              onKeyDown={(e) => e.key === "Enter" && chooseName(nameDraft)}
+              className="wmx-body wmx-focus" style={{ flex: 1, padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+            <button onClick={() => chooseName(nameDraft)} className="wmx-body wmx-focus"
+              style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontWeight: 600 }}>
+              Continue
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="wmx-body" style={{ minHeight: "100%", background: C.bg, display: "flex" }}>
@@ -667,6 +763,17 @@ export default function WMXTracker() {
           </div>
         </Card>
 
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.good }} title="You're connected" />
+            <span className="wmx-body" style={{ fontSize: 12, color: C.ink, fontWeight: 600 }}>{userName}</span>
+          </div>
+          <button onClick={() => { localStorage.removeItem(USER_NAME_KEY); setUserName(""); }} className="wmx-body wmx-focus"
+            style={{ fontSize: 10.5, color: C.sub, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+            switch
+          </button>
+        </div>
+
         <button onClick={handleSave} disabled={!dirty || saveState === "saving"} className="wmx-focus"
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -686,6 +793,11 @@ export default function WMXTracker() {
         {lastSaved && (
           <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textAlign: "center", marginTop: -10 }}>
             Last saved {lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
+        {lastEditedBy && !lastSaved && (
+          <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textAlign: "center", marginTop: -10 }}>
+            Last edited by {lastEditedBy.by} · {new Date(lastEditedBy.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
 
@@ -729,6 +841,21 @@ export default function WMXTracker() {
         <div style={{ maxWidth: 1000 }}>
           {!loaded && (
             <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading saved progress…</div>
+          )}
+          {remoteBanner && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: C.brassSoft, border: `1px solid ${C.brass}40`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, flexWrap: "wrap" }}>
+              <span className="wmx-body" style={{ fontSize: 12.5, color: C.ink }}>
+                <b>{remoteBanner.by}</b> saved changes while you had unsaved edits — reload to see theirs, or keep working and Save to overwrite with yours.
+              </span>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button onClick={reloadFromRemote} className="wmx-body wmx-focus" style={{ fontSize: 12, fontWeight: 600, background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}>
+                  Reload theirs
+                </button>
+                <button onClick={() => setRemoteBanner(null)} className="wmx-body wmx-focus" style={{ fontSize: 12, background: "none", border: `1px solid ${C.line}`, borderRadius: 6, padding: "6px 12px", cursor: "pointer" }}>
+                  Keep mine
+                </button>
+              </div>
+            </div>
           )}
           {tab === "setup" && <SetupProgress onboarding={data.onboarding} setOnboarding={setOnboarding} />}
           {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} />}
