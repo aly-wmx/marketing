@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
-  ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2,
+  ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -149,9 +149,9 @@ const initAccounts = () => [
 const initTickets = () => [
   { id: "t1", biz: "gh", type: "issue", title: "Spotipo auth window reverted to 30 days?",
     details: "Double-check UniFi didn't reset the 8–12hr setting after firmware update.",
-    submitter: "You", status: "open", created: "Aug 12" },
+    submitter: "You", status: "open", created: "Aug 12", assignee: "" },
   { id: "t2", biz: "wm", type: "question", title: "Confirm the $200/mo pixel product with Blue Collar",
-    details: "Need to know if this is a de-anon tool before renewing.", submitter: "You", status: "in_progress", created: "Aug 14" },
+    details: "Need to know if this is a de-anon tool before renewing.", submitter: "You", status: "in_progress", created: "Aug 14", assignee: "" },
 ];
 
 function seedState() {
@@ -463,14 +463,17 @@ function AccountsTab({ accounts, setAccounts }) {
   );
 }
 
-function TicketsTab({ tickets, setTickets }) {
+function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAssigned }) {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ biz: "wm", type: "question", title: "", details: "", submitter: "" });
+  const blankForm = () => ({ biz: "wm", type: "question", title: "", details: "", submitter: userName || "", assignee: "" });
+  const [form, setForm] = useState(blankForm);
 
   const addTicket = () => {
     if (!form.title.trim()) return;
-    setTickets((prev) => [...prev, { ...form, id: `t${Date.now()}`, status: "open", created: "Today" }]);
-    setForm({ biz: "wm", type: "question", title: "", details: "", submitter: "" });
+    const ticket = { ...form, id: `t${Date.now()}`, status: "open", created: "Today" };
+    setTickets((prev) => [...prev, ticket]);
+    if (ticket.assignee) onTicketAssigned(ticket);
+    setForm(blankForm());
     setShowForm(false);
   };
   const setStatus = (id, status) => setTickets((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
@@ -502,6 +505,10 @@ function TicketsTab({ tickets, setTickets }) {
             </select>
             <input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6, gridColumn: "span 2" }} />
             <input placeholder="Your name" value={form.submitter} onChange={(e) => setForm({ ...form, submitter: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+            <select value={form.assignee} onChange={(e) => setForm({ ...form, assignee: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+              <option value="">Assign to…</option>
+              {assignableNames.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
             <input placeholder="Details" value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6, gridColumn: "span 3" }} />
           </div>
           <button onClick={addTicket} className="wmx-body wmx-focus" style={{ marginTop: 10, background: C.ink, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, padding: "8px 14px", fontWeight: 600 }}>Submit</button>
@@ -527,6 +534,7 @@ function TicketsTab({ tickets, setTickets }) {
                       <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
                         <Pill color={b.color} bg={b.soft}>{b.name}</Pill>
                         <Pill color={C.sub} bg={C.bg}>{t.type}</Pill>
+                        {t.assignee && <Pill color={C.brass} bg={C.brassSoft}>→ {t.assignee}</Pill>}
                       </div>
                       <div className="wmx-display" style={{ fontSize: 14, color: C.ink }}>{t.title}</div>
                       {t.details && <div className="wmx-body" style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>{t.details}</div>}
@@ -581,6 +589,8 @@ export default function WMXTracker() {
   const [userName, setUserName] = useState(() => localStorage.getItem(USER_NAME_KEY) || "");
   const [nameDraft, setNameDraft] = useState("");
   const [remoteBanner, setRemoteBanner] = useState(null); // { by, at } when a remote save lands while dirty
+  const [toasts, setToasts] = useState([]); // in-app "you were assigned a ticket" banners
+  const [unreadCount, setUnreadCount] = useState(0);
   const dirtyRef = useRef(dirty);
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
 
@@ -589,7 +599,54 @@ export default function WMXTracker() {
     if (!clean) return;
     localStorage.setItem(USER_NAME_KEY, clean);
     setUserName(clean);
+    // Ask now, while we still have the click as a user gesture — browsers
+    // refuse silent/background permission prompts.
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
   };
+
+  const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  // ticket assignment: write one row per assignment, the recipient's own
+  // browser tab picks it up over the realtime channel below.
+  const notifyAssignee = useCallback(async (ticket) => {
+    if (!ticket.assignee || ticket.assignee === userName) return; // no need to notify yourself
+    try {
+      await supabase.from("ticket_notifications").insert({
+        ticket_id: ticket.id,
+        recipient: ticket.assignee,
+        title: ticket.title,
+        biz: ticket.biz,
+        created_by: userName || ticket.submitter || "Unknown",
+      });
+    } catch (e) {
+      console.error("Could not send ticket notification:", e.message ?? e);
+    }
+  }, [userName]);
+
+  // realtime: pushed a ticket notification addressed to us — surface it as an
+  // in-app toast (and, if the tab isn't focused, a real OS notification too).
+  useEffect(() => {
+    if (!userName) return;
+    const channel = supabase
+      .channel(`ticket_notifications_${userName}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "ticket_notifications", filter: `recipient=eq.${userName}` },
+        (payload) => {
+          const n = payload.new;
+          setToasts((prev) => [...prev, n]);
+          setUnreadCount((c) => c + 1);
+          setTimeout(() => dismissToast(n.id), 8000);
+          if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
+            new Notification(`New ticket from ${n.created_by}`, { body: n.title });
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userName]);
 
   // load persisted state on mount
   useEffect(() => {
@@ -710,6 +767,7 @@ export default function WMXTracker() {
   }, [data.onboarding]);
 
   const openTicketCount = data.tickets.filter((t) => t.status !== "resolved").length;
+  const assignableNames = useMemo(() => data.team.filter((m) => !m.vendor).map((m) => m.name), [data.team]);
 
   if (!userName) {
     return (
@@ -768,10 +826,21 @@ export default function WMXTracker() {
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.good }} title="You're connected" />
             <span className="wmx-body" style={{ fontSize: 12, color: C.ink, fontWeight: 600 }}>{userName}</span>
           </div>
-          <button onClick={() => { localStorage.removeItem(USER_NAME_KEY); setUserName(""); }} className="wmx-body wmx-focus"
-            style={{ fontSize: 10.5, color: C.sub, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-            switch
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => { setTab("tickets"); setUnreadCount(0); }} className="wmx-focus" title="Tickets assigned to you"
+              style={{ position: "relative", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
+              <Bell size={15} color={unreadCount > 0 ? C.brass : C.sub} />
+              {unreadCount > 0 && (
+                <span className="wmx-body" style={{ position: "absolute", top: -6, right: -7, fontSize: 9.5, fontWeight: 700, color: "#fff", background: C.warn, borderRadius: 999, padding: "0 4px", lineHeight: "13px", minWidth: 13, textAlign: "center" }}>
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            <button onClick={() => { localStorage.removeItem(USER_NAME_KEY); setUserName(""); }} className="wmx-body wmx-focus"
+              style={{ fontSize: 10.5, color: C.sub, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+              switch
+            </button>
+          </div>
         </div>
 
         <button onClick={handleSave} disabled={!dirty || saveState === "saving"} className="wmx-focus"
@@ -863,7 +932,7 @@ export default function WMXTracker() {
           {tab === "kpis" && <KpiTab kpis={data.kpis} setKpis={setKpis} />}
           {tab === "saas" && <SaasTab saas={SAAS} />}
           {tab === "accounts" && <AccountsTab accounts={data.accounts} setAccounts={setAccounts} />}
-          {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} />}
+          {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} />}
 
           <div className="wmx-body" style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", fontSize: 11, color: C.sub, flexWrap: "wrap", gap: 6 }}>
             <span>WMX Management Group — internal tool</span>
@@ -871,6 +940,26 @@ export default function WMXTracker() {
           </div>
         </div>
       </main>
+
+      <div style={{ position: "fixed", top: 18, right: 18, display: "flex", flexDirection: "column", gap: 8, zIndex: 50, maxWidth: 320 }}>
+        {toasts.map((n) => (
+          <Card key={n.id} style={{ padding: "12px 14px", boxShadow: "0 6px 18px rgba(20,20,15,0.14)", borderLeft: `3px solid ${C.brass}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <div>
+                <div className="wmx-body" style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>{n.created_by} assigned you a ticket</div>
+                <div className="wmx-body" style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{n.title}</div>
+                <button onClick={() => { setTab("tickets"); dismissToast(n.id); }} className="wmx-body wmx-focus"
+                  style={{ marginTop: 6, fontSize: 11.5, color: C.brass, background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}>
+                  View ticket
+                </button>
+              </div>
+              <button onClick={() => dismissToast(n.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, flexShrink: 0 }}>
+                <X size={13} color={C.sub} />
+              </button>
+            </div>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

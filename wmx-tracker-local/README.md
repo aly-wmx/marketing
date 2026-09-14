@@ -4,6 +4,7 @@ A real, running copy of the WMX tracker with:
 - **Persistence** — saved to Supabase, not just one browser
 - **Realtime sync** — when someone else saves, you see it live (or get asked before it overwrites your unsaved edits)
 - **Per-user attribution** — every save records who made it ("Last edited by Aly · 2:14 PM")
+- **Ticket assignment notifications** — assign a new ticket to a teammate and they get a live in-app banner (plus a desktop notification if their tab is in the background and they've allowed it)
 
 ## 1. Create a Supabase project (free tier is fine)
 
@@ -12,9 +13,10 @@ A real, running copy of the WMX tracker with:
 ## 2. Create the table + enable realtime
 
 1. **SQL Editor → New query** → paste in `supabase/schema.sql` → **Run**.
-   This creates `tracker_state` (one JSON-blob row, plus `updated_by`/`updated_at`),
-   sets an open RLS policy so the app works immediately, and adds the table to
-   Supabase's realtime publication (required — realtime is off per-table by default).
+   This creates `tracker_state` (one JSON-blob row, plus `updated_by`/`updated_at`) and
+   `ticket_notifications` (one row per ticket assignment), sets an open RLS policy on
+   both so the app works immediately, and adds both tables to Supabase's realtime
+   publication (required — realtime is off per-table by default).
 
 ## 3. Connect the app
 
@@ -82,6 +84,10 @@ anyone on the team can open.
 - **Passwords in Accounts & Logins are still plaintext** in the JSON blob,
   same caveat as before. Don't put anything actually sensitive in there until
   it's moved to an encrypted column with RLS scoped to authenticated users.
+- **Ticket notifications only reach an open tab**, not a closed browser or a
+  phone that doesn't have the app open — this is a realtime in-app/desktop
+  notification, not true push notifications (which need a service worker,
+  VAPID keys, and a backend to send them while the browser is fully closed).
 
 ## Project structure
 

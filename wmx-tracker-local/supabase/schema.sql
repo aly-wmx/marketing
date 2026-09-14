@@ -45,3 +45,35 @@ end $$;
 insert into tracker_state (id, data, updated_by)
 values ('default', '{}'::jsonb, 'seed')
 on conflict (id) do nothing;
+
+-- Ticket assignment notifications: one row per "you were assigned a ticket"
+-- event. The app subscribes to inserts filtered to its own name over
+-- realtime, so this only needs to be inserted into and read via that
+-- channel — no polling, no per-user table.
+create table if not exists ticket_notifications (
+  id uuid primary key default gen_random_uuid(),
+  ticket_id text,
+  recipient text not null,
+  title text,
+  biz text,
+  created_by text,
+  created_at timestamptz not null default now()
+);
+
+alter table ticket_notifications enable row level security;
+
+drop policy if exists "allow all for now" on ticket_notifications;
+create policy "allow all for now" on ticket_notifications
+  for all
+  using (true)
+  with check (true);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'ticket_notifications'
+  ) then
+    alter publication supabase_realtime add table ticket_notifications;
+  end if;
+end $$;
