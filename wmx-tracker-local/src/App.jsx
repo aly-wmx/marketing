@@ -111,27 +111,44 @@ const STACK = [
 ];
 
 const KPI_CATEGORIES = [
-  { id: "leadgen", name: "Lead Generation", perBiz: false },
-  { id: "gbp", name: "Google Business Profile", perBiz: false },
-  { id: "paid", name: "Paid Media", perBiz: false },
-  { id: "organic", name: "Organic Social", perBiz: true },
-  { id: "email", name: "Email / SMS", perBiz: false },
-  { id: "destination", name: "Destination Metrics", perBiz: false },
-  { id: "seo", name: "SEO & AI Search", perBiz: false },
+  { id: "leadgen", name: "Lead Generation" },
+  { id: "gbp", name: "Google Business Profile" },
+  { id: "paid", name: "Paid Media" },
+  { id: "organic", name: "Organic Social" },
+  { id: "email", name: "Email / SMS" },
+  { id: "destination", name: "Destination Metrics" },
+  { id: "seo", name: "SEO & AI Search" },
+];
+
+// Full names for the per-business KPI tabs, as distinct from the shorter
+// names (BUSINESSES[].name) used everywhere else in the app.
+const KPI_TAB_NAME = {
+  wm: "Watermark Design Build",
+  mn: "Manolo Roofing",
+  gh: "Garrison House",
+  tf: "Twofold Coffee & Kitchen",
+};
+
+// Every metric is tracked per business — a lead-gen business and a
+// destination business genuinely have different numbers here.
+const KPI_METRICS_BY_CATEGORY = [
+  ["leadgen", ["Leads per week", "Cost per lead", "Lead → job close rate"]],
+  ["gbp", ["Map-pack position (grid avg)", "Review count", "Review score"]],
+  ["paid", ["LSA spend vs. budget cap", "Meta CPA"]],
+  ["organic", ["Follower growth rate", "Engagement by reach", "Saves/shares"]],
+  ["email", ["Missed-call text-back reply rate", "Review request → completion rate"]],
+  ["destination", ["WiFi capture sign-ups / week", "Visit → membership conversion"]],
+  ["seo", ["AI baseline: mentions / 25 questions", "Organic map-pack impressions"]],
 ];
 
 function seedKpis() {
   const rows = [];
   let n = 0;
-  const add = (categoryId, metric, biz = null) =>
+  const add = (categoryId, metric, biz) =>
     rows.push({ id: `k${n++}`, categoryId, biz, metric, current: "", target: "", cadence: "Monthly", notes: "" });
-  add("leadgen", "Leads per week"); add("leadgen", "Cost per lead"); add("leadgen", "Lead → job close rate");
-  add("gbp", "Map-pack position (grid avg)"); add("gbp", "Review count"); add("gbp", "Review score");
-  add("paid", "LSA spend vs. budget cap"); add("paid", "Meta CPA");
-  add("email", "Missed-call text-back reply rate"); add("email", "Review request → completion rate");
-  add("destination", "WiFi capture sign-ups / week"); add("destination", "Visit → membership conversion");
-  add("seo", "AI baseline: mentions / 25 questions"); add("seo", "Organic map-pack impressions");
-  ["follower growth rate", "engagement by reach", "saves/shares"].forEach((m) => BUSINESSES.forEach((b) => add("organic", m, b.id)));
+  KPI_METRICS_BY_CATEGORY.forEach(([categoryId, metrics]) => {
+    metrics.forEach((metric) => BUSINESSES.forEach((b) => add(categoryId, metric, b.id)));
+  });
   return rows;
 }
 
@@ -178,6 +195,12 @@ function isValidOnboarding(onboarding) {
   if (!onboarding || typeof onboarding !== "object") return false;
   return BUSINESSES.every((b) => Array.isArray(onboarding[b.id]) && onboarding[b.id].length > 0
     && onboarding[b.id].every((item) => item && typeof item.status === "string" && STATUS_ORDER.includes(item.status)));
+}
+
+// Guards against a save from before KPIs were split per business (every row
+// used to share biz: null except the Organic Social category).
+function isValidKpis(kpis) {
+  return Array.isArray(kpis) && kpis.length > 0 && kpis.every((k) => k && typeof k.biz === "string" && bizById(k.biz));
 }
 
 const USER_NAME_KEY = "wmx-user-name";
@@ -336,15 +359,33 @@ function StackTab({ stack }) {
 }
 
 function KpiTab({ kpis, setKpis }) {
+  const [activeBiz, setActiveBiz] = useState(BUSINESSES[0].id);
   const [open, setOpen] = useState({ leadgen: true });
-  const [selBiz, setSelBiz] = useState("all");
   const update = (id, field, val) => setKpis((prev) => prev.map((k) => k.id === id ? { ...k, [field]: val } : k));
+  const metricCount = KPI_METRICS_BY_CATEGORY.reduce((sum, [, metrics]) => sum + metrics.length, 0);
+
   return (
     <>
-      <PageHeader eyebrow="35 metrics · 7 categories" title="KPIs" />
+      <PageHeader eyebrow={`${metricCount} metrics · ${KPI_CATEGORIES.length} categories · tracked per business`} title="KPIs" />
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
+        {BUSINESSES.map((b) => (
+          <button key={b.id} onClick={() => setActiveBiz(b.id)} className="wmx-body wmx-focus"
+            style={{
+              fontSize: 13, fontWeight: 600, padding: "8px 14px", borderRadius: 8,
+              border: `1px solid ${activeBiz === b.id ? b.color : C.line}`,
+              background: activeBiz === b.id ? b.color : "transparent",
+              color: activeBiz === b.id ? "#fff" : C.ink,
+              cursor: "pointer",
+            }}>
+            {KPI_TAB_NAME[b.id]}
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {KPI_CATEGORIES.map((cat) => {
-          const rows = kpis.filter((k) => k.categoryId === cat.id && (!cat.perBiz || selBiz === "all" || k.biz === selBiz));
+          const rows = kpis.filter((k) => k.categoryId === cat.id && k.biz === activeBiz);
           const isOpen = !!open[cat.id];
           return (
             <Card key={cat.id} style={{ padding: 0, overflow: "hidden" }}>
@@ -355,28 +396,17 @@ function KpiTab({ kpis, setKpis }) {
               </button>
               {isOpen && (
                 <div style={{ padding: "0 18px 18px", borderTop: `1px solid ${C.line}` }}>
-                  {cat.perBiz && (
-                    <div style={{ display: "flex", gap: 6, margin: "14px 0", flexWrap: "wrap" }}>
-                      <button onClick={() => setSelBiz("all")} className="wmx-body wmx-focus"
-                        style={{ fontSize: 11, padding: "4px 10px", borderRadius: 999, border: `1px solid ${C.line}`, background: selBiz === "all" ? C.ink : "transparent", color: selBiz === "all" ? "#fff" : C.ink, cursor: "pointer" }}>All</button>
-                      {BUSINESSES.map((b) => (
-                        <button key={b.id} onClick={() => setSelBiz(b.id)} className="wmx-body wmx-focus"
-                          style={{ fontSize: 11, padding: "4px 10px", borderRadius: 999, border: `1px solid ${C.line}`, background: selBiz === b.id ? b.color : "transparent", color: selBiz === b.id ? "#fff" : b.color, cursor: "pointer" }}>{b.name}</button>
-                      ))}
-                    </div>
-                  )}
                   <div style={{ overflowX: "auto" }}>
-                    <table className="wmx-body" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, marginTop: cat.perBiz ? 0 : 14 }}>
+                    <table className="wmx-body" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, marginTop: 14 }}>
                       <thead>
                         <tr style={{ textAlign: "left", color: C.sub, fontSize: 10.5, textTransform: "uppercase" }}>
-                          <th style={{ padding: "6px 0" }}>Metric</th>{cat.perBiz && <th>Business</th>}<th>Current</th><th>Target</th><th>Cadence</th><th>Notes</th>
+                          <th style={{ padding: "6px 0" }}>Metric</th><th>Current</th><th>Target</th><th>Cadence</th><th>Notes</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rows.map((k) => (
                           <tr key={k.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                            <td style={{ padding: "8px 0", color: C.ink, textTransform: "capitalize" }}>{k.metric}</td>
-                            {cat.perBiz && <td><Pill color={bizById(k.biz).color} bg={bizById(k.biz).soft}>{bizById(k.biz).name}</Pill></td>}
+                            <td style={{ padding: "8px 0", color: C.ink }}>{k.metric}</td>
                             <td><input value={k.current} placeholder="—" onChange={(e) => update(k.id, "current", e.target.value)} className="wmx-body wmx-focus" style={{ width: 70, border: "none", borderBottom: `1px solid ${C.line}`, background: "transparent", fontSize: 12.5, padding: "3px 0" }} /></td>
                             <td><input value={k.target} placeholder="—" onChange={(e) => update(k.id, "target", e.target.value)} className="wmx-body wmx-focus" style={{ width: 70, border: "none", borderBottom: `1px solid ${C.line}`, background: "transparent", fontSize: 12.5, padding: "3px 0" }} /></td>
                             <td style={{ color: C.sub }}>{k.cadence}</td>
@@ -841,6 +871,7 @@ export default function WMXTracker() {
             ...prev,
             ...row.data,
             onboarding: isValidOnboarding(row.data.onboarding) ? row.data.onboarding : prev.onboarding,
+            kpis: isValidKpis(row.data.kpis) ? row.data.kpis : prev.kpis,
           }));
           if (row.updated_by) setLastEditedBy({ by: row.updated_by, at: row.updated_at });
         }
@@ -869,7 +900,11 @@ export default function WMXTracker() {
             // don't silently overwrite unsaved local changes — let the user decide
             setRemoteBanner({ by: incoming.updated_by, at: incoming.updated_at });
           } else if (isValidOnboarding(incoming.data?.onboarding)) {
-            setData((prev) => ({ ...prev, ...incoming.data }));
+            setData((prev) => ({
+              ...prev,
+              ...incoming.data,
+              kpis: isValidKpis(incoming.data?.kpis) ? incoming.data.kpis : prev.kpis,
+            }));
           }
         }
       )
@@ -938,7 +973,12 @@ export default function WMXTracker() {
   const reloadFromRemote = async () => {
     const { data: row } = await supabase.from("tracker_state").select("data, updated_by, updated_at").eq("id", "default").single();
     if (row?.data) {
-      setData((prev) => ({ ...prev, ...row.data, onboarding: isValidOnboarding(row.data.onboarding) ? row.data.onboarding : prev.onboarding }));
+      setData((prev) => ({
+        ...prev,
+        ...row.data,
+        onboarding: isValidOnboarding(row.data.onboarding) ? row.data.onboarding : prev.onboarding,
+        kpis: isValidKpis(row.data.kpis) ? row.data.kpis : prev.kpis,
+      }));
       setDirty(false);
     }
     setRemoteBanner(null);
