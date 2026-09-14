@@ -1,90 +1,106 @@
-# WMX Portfolio Control — local dev server + Supabase
+# WMX Portfolio Control — realtime, Supabase-backed, deployable
 
-This is a real, runnable copy of the WMX tracker, wired to Supabase so progress
-is saved for real and shared across anyone using the app — not just one browser.
+A real, running copy of the WMX tracker with:
+- **Persistence** — saved to Supabase, not just one browser
+- **Realtime sync** — when someone else saves, you see it live (or get asked before it overwrites your unsaved edits)
+- **Per-user attribution** — every save records who made it ("Last edited by Aly · 2:14 PM")
+- **Ticket assignment notifications** — assign a new ticket to a teammate and they get a live in-app banner (plus a desktop notification if their tab is in the background and they've allowed it)
 
 ## 1. Create a Supabase project (free tier is fine)
 
-1. Go to https://supabase.com and sign in / sign up.
-2. **New project** → pick an org, name it (e.g. `wmx-tracker`), set a database password, choose a region.
-3. Wait ~2 minutes for it to provision.
+1. https://supabase.com → sign in → **New project**. Name it (e.g. `wmx-tracker`), set a DB password, pick a region. Wait ~2 min.
 
-## 2. Create the table
+## 2. Create the table + enable realtime
 
-1. In your new project, go to **SQL Editor → New query**.
-2. Paste in the contents of `supabase/schema.sql` (in this folder) and click **Run**.
-   This creates one table, `tracker_state`, that holds the whole app's data as a
-   single JSON blob under the row `id = 'default'` — same shape the app already
-   uses internally, so no data-model translation needed.
+1. **SQL Editor → New query** → paste in `supabase/schema.sql` → **Run**.
+   This creates `tracker_state` (one JSON-blob row, plus `updated_by`/`updated_at`) and
+   `ticket_notifications` (one row per ticket assignment), sets an open RLS policy on
+   both so the app works immediately, and adds both tables to Supabase's realtime
+   publication (required — realtime is off per-table by default).
 
-## 3. Connect the app to your project
+## 3. Connect the app
 
-1. In Supabase: **Project Settings → API**. Copy the **Project URL** and the
-   **`anon` `public`** key (not the `service_role` key — that one must never
-   ship in frontend code).
-2. In this folder, copy `.env.example` to `.env.local`:
-   ```bash
-   cp .env.example .env.local
-   ```
-3. Paste your values into `.env.local`:
+1. **Project Settings → API** → copy the **Project URL** and the **`anon` `public`** key.
+2. `cp .env.example .env.local`, then fill in:
    ```
    VITE_SUPABASE_URL=https://your-project-ref.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-public-key-here
    ```
 
-## 4. Run it
+## 4. Run it locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the printed URL (usually `http://localhost:5173`). The **Save changes**
-button now writes straight to your Supabase table — check **Table Editor →
-tracker_state** in the Supabase dashboard and you'll see the `data` column
-update after you click it.
+Open `http://localhost:5173`. First thing you'll see: a "Who's this?" prompt —
+pick your name (or type one). It's stored in your browser only and gets
+attached to your saves so teammates know who changed what.
 
-## What this does and doesn't give you yet
+**To test realtime**: open the app in two browser tabs (or two browsers),
+pick a different name in each. Toggle a status and Save in one tab — the
+other tab updates live if it has no unsaved changes of its own, or shows a
+banner ("Aly saved changes — reload to see theirs, or keep working") if it does.
 
-- ✅ Real persistence, survives restarts, shared across anyone who runs the app
-  against the same Supabase project.
-- ✅ No secrets in the artifact/preview — your keys stay in `.env.local`, which
-  is already gitignored.
-- ⚠️ **No auth yet.** The RLS policy in `schema.sql` is wide open (`using (true)`)
-  so the app works immediately. Anyone with your anon key can read/write the
-  table. Fine for a private internal tool; add Supabase Auth before this is
-  reachable by anyone outside your team.
-- ⚠️ **Single shared row, not per-user.** Everyone editing sees the same data —
-  there's no "my view" vs "your view" yet, and no realtime push (you'll see
-  someone else's changes on your next Save/reload, not instantly). Both are
-  natural next additions once this is deployed.
-
-## Deploying (so it's not just localhost)
-
-This is a standard Vite + React app, so it deploys to Vercel with no extra
-config:
+## 5. Deploy it live on Vercel
 
 ```bash
 npm i -g vercel
 vercel
 ```
 
-Add the same two `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` values as
-Environment Variables in the Vercel project settings (Vercel won't read your
-local `.env.local`).
+Follow the prompts (link/create a project). Then in the Vercel dashboard for
+that project: **Settings → Environment Variables** → add the same two
+`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` values (Vercel doesn't read
+your local `.env.local`). Redeploy (`vercel --prod`) and you have a real URL
+anyone on the team can open.
+
+## How the realtime piece actually works
+
+- Every browser tab opens a Supabase Realtime channel subscribed to
+  `postgres_changes` on the `tracker_state` row.
+- When *anyone* saves, Supabase pushes that update to every open tab within
+  ~1 second.
+- If your tab has **no unsaved changes**, it just applies the incoming update
+  silently — your screen now matches what was just saved.
+- If your tab **does** have unsaved changes, it doesn't clobber them — you get
+  a banner to either reload their version or keep working and overwrite with
+  yours on your next Save. This is "last write wins with a warning," not
+  true field-level merging — good enough for a small team, not built for
+  heavy simultaneous editing of the exact same field.
+
+## Known limits (be aware of these before relying on it)
+
+- **No real auth.** Anyone with the app URL and anon key can read/write.
+  "Who's this?" is a name label, not a login — it doesn't stop anyone from
+  typing someone else's name. Fine for an internal tool on a private URL;
+  add Supabase Auth before this is public-facing.
+- **One shared row, not normalized tables.** Simplest possible model to get
+  realtime + attribution working fast. If this grows past a small team, the
+  fuller relational schema in `wmx-tracker-build-spec.md` (separate tables
+  per tab, per-row history) is the next real step — it lets you show
+  "who changed *this specific ticket*" instead of "who changed *something*."
+- **Passwords in Accounts & Logins are still plaintext** in the JSON blob,
+  same caveat as before. Don't put anything actually sensitive in there until
+  it's moved to an encrypted column with RLS scoped to authenticated users.
+- **Ticket notifications only reach an open tab**, not a closed browser or a
+  phone that doesn't have the app open — this is a realtime in-app/desktop
+  notification, not true push notifications (which need a service worker,
+  VAPID keys, and a backend to send them while the browser is fully closed).
 
 ## Project structure
 
 ```
 wmx-tracker-local/
-├── .env.example          — copy to .env.local and fill in your Supabase values
+├── .env.example
 ├── index.html
 ├── package.json
 ├── vite.config.js
 ├── supabase/
-│   └── schema.sql        — run once in Supabase's SQL Editor
+│   └── schema.sql        — table + RLS policy + realtime publication
 └── src/
-    ├── main.jsx           — React entry point
-    ├── supabaseClient.js  — Supabase client, reads the env vars above
-    └── App.jsx            — the tracker itself (all 7 tabs, Save button)
+    ├── main.jsx
+    ├── supabaseClient.js
+    └── App.jsx            — tabs, identity prompt, realtime subscription, Save
 ```
