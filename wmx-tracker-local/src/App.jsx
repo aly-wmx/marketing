@@ -3,7 +3,7 @@ import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
   ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
-  Share2, TrendingUp, TrendingDown,
+  Share2, TrendingUp, TrendingDown, LogOut, Pencil,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -203,7 +203,6 @@ function isValidKpis(kpis) {
   return Array.isArray(kpis) && kpis.length > 0 && kpis.every((k) => k && typeof k.biz === "string" && bizById(k.biz));
 }
 
-const USER_NAME_KEY = "wmx-user-name";
 const KNOWN_TEAM_NAMES = ["You", "Avery", "Aly", "Brad", "Kenny", "Jeff"];
 
 /* --------------------------------- helpers --------------------------------- */
@@ -785,6 +784,128 @@ const TABS = [
   { id: "tickets", label: "Tickets", icon: Inbox },
 ];
 
+function GoogleGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.83.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z" />
+    </svg>
+  );
+}
+
+function LoginScreen() {
+  const [mode, setMode] = useState("signin"); // signin | signup
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  const withGoogle = async () => {
+    setGoogleBusy(true);
+    setError(null);
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    if (err) { setError(err.message); setGoogleBusy(false); }
+    // on success the browser redirects away, so no need to reset googleBusy
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email.trim() || !password) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const fn = mode === "signin" ? supabase.auth.signInWithPassword : supabase.auth.signUp;
+    const { error: err } = await fn({ email: email.trim(), password });
+    setBusy(false);
+    if (err) setError(err.message);
+    else if (mode === "signup") setNotice("Check your email to confirm your account, then sign in.");
+  };
+
+  return (
+    <div className="wmx-body" style={{ minHeight: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <style>{FONTS}</style>
+      <Card style={{ padding: 28, maxWidth: 360, width: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 8, background: C.ink, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }} className="wmx-display">W</div>
+          <div>
+            <div className="wmx-display" style={{ fontSize: 15, color: C.ink, lineHeight: 1.1 }}>WMX</div>
+            <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub }}>Portfolio Control</div>
+          </div>
+        </div>
+
+        <button onClick={withGoogle} disabled={googleBusy} className="wmx-body wmx-focus"
+          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff", cursor: googleBusy ? "default" : "pointer", fontSize: 13.5, fontWeight: 600, color: C.ink }}>
+          <GoogleGlyph /> {googleBusy ? "Redirecting…" : "Continue with Google"}
+        </button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
+          <div style={{ flex: 1, height: 1, background: C.line }} />
+          <span className="wmx-body" style={{ fontSize: 11, color: C.sub }}>or</span>
+          <div style={{ flex: 1, height: 1, background: C.line }} />
+        </div>
+
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@wmx.com" autoComplete="email"
+            className="wmx-body wmx-focus" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password"
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
+            className="wmx-body wmx-focus" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+          {error && <div className="wmx-body" style={{ fontSize: 12, color: C.warn }}>{error}</div>}
+          {notice && <div className="wmx-body" style={{ fontSize: 12, color: C.good }}>{notice}</div>}
+          <button type="submit" disabled={busy} className="wmx-body wmx-focus"
+            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "9px 14px", cursor: busy ? "default" : "pointer", fontWeight: 600, fontSize: 13 }}>
+            {busy ? "…" : mode === "signin" ? "Sign in" : "Create account"}
+          </button>
+        </form>
+
+        <button onClick={() => { setMode((m) => m === "signin" ? "signup" : "signin"); setError(null); setNotice(null); }} className="wmx-body wmx-focus"
+          style={{ marginTop: 12, fontSize: 12, color: C.sub, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+          {mode === "signin" ? "New to WMX? Create an account" : "Already have an account? Sign in"}
+        </button>
+      </Card>
+    </div>
+  );
+}
+
+function NamePrompt({ onChoose }) {
+  const [draft, setDraft] = useState("");
+  return (
+    <div className="wmx-body" style={{ minHeight: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <style>{FONTS}</style>
+      <Card style={{ padding: 28, maxWidth: 360, width: "100%" }}>
+        <div className="wmx-display" style={{ fontSize: 18, color: C.ink, marginBottom: 6 }}>What should we call you?</div>
+        <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
+          Labels your changes for the team (e.g. "Aly updated 2 min ago") and lets teammates assign you tickets.
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+          {KNOWN_TEAM_NAMES.map((n) => (
+            <button key={n} onClick={() => onChoose(n)} className="wmx-body wmx-focus"
+              style={{ fontSize: 12, padding: "6px 12px", borderRadius: 999, border: `1px solid ${C.line}`, background: "transparent", cursor: "pointer" }}>
+              {n}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Or type your name"
+            onKeyDown={(e) => e.key === "Enter" && onChoose(draft)}
+            className="wmx-body wmx-focus" style={{ flex: 1, padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+          <button onClick={() => onChoose(draft)} className="wmx-body wmx-focus"
+            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontWeight: 600 }}>
+            Continue
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export default function WMXTracker() {
   const [tab, setTab] = useState("setup");
   const [data, setData] = useState(seedState);
@@ -793,19 +914,34 @@ export default function WMXTracker() {
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const [lastSaved, setLastSaved] = useState(null);
   const [lastEditedBy, setLastEditedBy] = useState(null);
-  const [userName, setUserName] = useState(() => localStorage.getItem(USER_NAME_KEY) || "");
-  const [nameDraft, setNameDraft] = useState("");
+  const [session, setSession] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [editingName, setEditingName] = useState(false);
   const [remoteBanner, setRemoteBanner] = useState(null); // { by, at } when a remote save lands while dirty
   const [toasts, setToasts] = useState([]); // in-app "you were assigned a ticket" banners
   const [unreadCount, setUnreadCount] = useState(0);
   const dirtyRef = useRef(dirty);
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
 
-  const chooseName = (name) => {
+  // real auth: Google OAuth or email/password, backed by Supabase Auth —
+  // the "who's this" name is now a display label on top of a real account,
+  // not the whole login.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const userName = session?.user?.user_metadata?.display_name || "";
+
+  const chooseName = async (name) => {
     const clean = name.trim();
     if (!clean) return;
-    localStorage.setItem(USER_NAME_KEY, clean);
-    setUserName(clean);
+    await supabase.auth.updateUser({ data: { display_name: clean } });
+    setEditingName(false);
     // Ask now, while we still have the click as a user gesture — browsers
     // refuse silent/background permission prompts.
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
@@ -992,35 +1128,14 @@ export default function WMXTracker() {
   const openTicketCount = data.tickets.filter((t) => t.status !== "resolved").length;
   const assignableNames = useMemo(() => data.team.filter((m) => !m.vendor).map((m) => m.name), [data.team]);
 
-  if (!userName) {
-    return (
-      <div className="wmx-body" style={{ minHeight: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <style>{FONTS}</style>
-        <Card style={{ padding: 28, maxWidth: 360, width: "100%" }}>
-          <div className="wmx-display" style={{ fontSize: 18, color: C.ink, marginBottom: 6 }}>Who's this?</div>
-          <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
-            Used to label your changes for the team (e.g. "Aly updated 2 min ago"). Stored only in this browser.
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-            {KNOWN_TEAM_NAMES.map((n) => (
-              <button key={n} onClick={() => chooseName(n)} className="wmx-body wmx-focus"
-                style={{ fontSize: 12, padding: "6px 12px", borderRadius: 999, border: `1px solid ${C.line}`, background: "transparent", cursor: "pointer" }}>
-                {n}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Or type your name"
-              onKeyDown={(e) => e.key === "Enter" && chooseName(nameDraft)}
-              className="wmx-body wmx-focus" style={{ flex: 1, padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
-            <button onClick={() => chooseName(nameDraft)} className="wmx-body wmx-focus"
-              style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontWeight: 600 }}>
-              Continue
-            </button>
-          </div>
-        </Card>
-      </div>
-    );
+  if (!authChecked) {
+    return <div className="wmx-body" style={{ minHeight: "100%", background: C.bg }} />;
+  }
+  if (!session) {
+    return <LoginScreen />;
+  }
+  if (!userName || editingName) {
+    return <NamePrompt onChoose={chooseName} />;
   }
 
   return (
@@ -1059,9 +1174,13 @@ export default function WMXTracker() {
                 </span>
               )}
             </button>
-            <button onClick={() => { localStorage.removeItem(USER_NAME_KEY); setUserName(""); }} className="wmx-body wmx-focus"
-              style={{ fontSize: 10.5, color: C.sub, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-              switch
+            <button onClick={() => setEditingName(true)} title="Change display name" className="wmx-focus"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
+              <Pencil size={12} color={C.sub} />
+            </button>
+            <button onClick={() => supabase.auth.signOut()} title="Sign out" className="wmx-focus"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
+              <LogOut size={13} color={C.sub} />
             </button>
           </div>
         </div>

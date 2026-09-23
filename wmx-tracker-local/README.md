@@ -6,6 +6,7 @@ A real, running copy of the WMX tracker with:
 - **Per-user attribution** — every save records who made it ("Last edited by Aly · 2:14 PM")
 - **Ticket assignment notifications** — assign a new ticket to a teammate and they get a live in-app banner (plus a desktop notification if their tab is in the background and they've allowed it)
 - **Social Media Hub** — a tab for tracking follower counts per brand/platform, backed by the `brands`/`platforms`/`weekly_snapshots` tables already provisioned in Supabase (manual entry for now, week-over-week deltas, ready for an automated API sync later)
+- **Real login** — Supabase Auth gates the app: Google OAuth or an email/password account, not just a name label. Every table's RLS policy requires an authenticated session, so the data is actually protected, not just hidden behind a UI screen.
 
 ## 1. Create a Supabase project (free tier is fine)
 
@@ -35,9 +36,32 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. First thing you'll see: a "Who's this?" prompt —
-pick your name (or type one). It's stored in your browser only and gets
-attached to your saves so teammates know who changed what.
+Open `http://localhost:5173`. First thing you'll see: a real sign-in screen —
+"Continue with Google" or an email/password account. After signing in for the
+first time you'll be asked what to call you ("Aly", "Brad", etc.) — that label
+gets attached to your saves so teammates know who changed what, and follows
+your account across devices (it's stored in Supabase Auth's user metadata,
+not localStorage). Click the pencil icon next to your name in the sidebar to
+change it later, or the sign-out icon to switch accounts.
+
+### Enabling Google sign-in (one-time setup, do this in the dashboards)
+
+Email/password sign-in works immediately — Supabase enables it by default.
+Google sign-in needs two manual steps that can't be done from code:
+
+1. **Google Cloud Console** → APIs & Services → Credentials → **Create
+   OAuth client ID** (type: Web application).
+   - Authorized redirect URI: `https://<your-project-ref>.supabase.co/auth/v1/callback`
+   - Authorized JavaScript origin: your deployed app's URL (and
+     `http://localhost:5173` for local dev)
+2. **Supabase Dashboard** → Authentication → Providers → **Google** → paste
+   in the Client ID and Client Secret from step 1 → Save.
+3. Still in Authentication → URL Configuration, make sure your deployed
+   app's URL is listed under **Redirect URLs** (this is what
+   `options.redirectTo` in `supabaseClient`'s auth call has to match).
+
+Until that's done, "Continue with Google" will error — email/password still
+works fine in the meantime.
 
 **To test realtime**: open the app in two browser tabs (or two browsers),
 pick a different name in each. Toggle a status and Save in one tab — the
@@ -73,10 +97,11 @@ anyone on the team can open.
 
 ## Known limits (be aware of these before relying on it)
 
-- **No real auth.** Anyone with the app URL and anon key can read/write.
-  "Who's this?" is a name label, not a login — it doesn't stop anyone from
-  typing someone else's name. Fine for an internal tool on a private URL;
-  add Supabase Auth before this is public-facing.
+- **Anyone with an account gets full access.** Signing in (Google or
+  email/password) is real — RLS requires `authenticated` on every table —
+  but there's no role/permission tiering yet. Any signed-in account can read
+  and write everything. Fine for a small trusted team; add role-based access
+  before this includes people you don't fully trust with all of it.
 - **One shared row, not normalized tables.** Simplest possible model to get
   realtime + attribution working fast. If this grows past a small team, the
   fuller relational schema in `wmx-tracker-build-spec.md` (separate tables
