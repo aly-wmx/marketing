@@ -37,12 +37,16 @@ const FONTS = `
 .wmx-nav{display:flex;flex-direction:column;gap:2px;}
 .wmx-main{flex:1;padding:28px 32px;min-width:0;}
 .wmx-ticket-board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.wmx-form-grid{display:grid;grid-template-columns:1fr 1fr;}
 @media (max-width: 860px){
   .wmx-shell{flex-direction:column;}
   .wmx-sidebar{width:100%;}
   .wmx-nav{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px;}
   .wmx-main{padding:18px 16px;}
   .wmx-ticket-board{grid-template-columns:1fr;}
+}
+@media (max-width: 520px){
+  .wmx-form-grid{grid-template-columns:1fr;}
 }
 `;
 
@@ -842,7 +846,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
           onClick={() => setShowForm(false)}>
           <Card style={{ padding: 24, maxWidth: 480, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
             <div className="wmx-display" style={{ fontSize: 17, color: C.ink, marginBottom: 16 }}>New ticket</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="wmx-form-grid" style={{ gap: 12 }}>
               <FormField label="Business">
                 <select value={form.biz} onChange={(e) => setForm({ ...form, biz: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
                   {BUSINESSES.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
