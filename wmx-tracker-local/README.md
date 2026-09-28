@@ -4,7 +4,7 @@ A real, running copy of the WMX tracker with:
 - **Persistence** — saved to Supabase, not just one browser
 - **Realtime sync** — when someone else saves, you see it live (or get asked before it overwrites your unsaved edits)
 - **Per-user attribution** — every save records who made it ("Last edited by Aly · 2:14 PM")
-- **Ticket assignment notifications** — assign a new ticket to a teammate and they get a live in-app banner (plus a desktop notification if their tab is in the background and they've allowed it)
+- **Ticket assignment notifications** — assign a new ticket to a teammate and they get a live in-app banner (plus a desktop notification if their tab is in the background), a Slack message, and an email — all three fire automatically from a database trigger the instant a ticket's assignee is set or changed, not just from the client that made the change.
 - **Social Media Hub** — pick a business, pick a platform (Facebook/Instagram/LinkedIn/TikTok), see followers + engagement for that combo with week-over-week deltas and trend sparklines, backed by the `brands`/`platforms`/`weekly_snapshots` tables already provisioned in Supabase (manual entry for now, ready for an automated API sync later)
 - **Real login** — Supabase Auth gates the app: Google OAuth or an email/password account, not just a name label. Every table's RLS policy requires an authenticated session, so the data is actually protected, not just hidden behind a UI screen.
 - **Tickets with priority, due dates, and comments** — filterable by business/priority/title, sorted by priority then due date within each column. New tickets open in a labeled popup form; cards are drag-and-droppable directly between Open/In Progress/Resolved; reassigning a ticket (from the card itself, not just at creation) automatically notifies the new assignee.
@@ -71,6 +71,30 @@ Google sign-in needs two manual steps that can't be done from code:
 Until that's done, "Continue with Google" will error — email/password still
 works fine in the meantime.
 
+### Slack + email ticket notifications (one-time setup)
+
+Assigning (or reassigning) a ticket pushes to Slack and email automatically,
+via a Postgres trigger (`dispatch_ticket_notification`, in `schema.sql`)
+that calls the `notify-ticket` Edge Function (`supabase/functions/notify-ticket/`).
+
+1. **Slack**: `api.slack.com/apps` → Create New App → *Blank app* → pick your
+   workspace → **Features → Incoming Webhooks** → activate → **Add New
+   Webhook to Workspace** → pick a channel → copy the webhook URL.
+2. **Email**: sign up at `resend.com` (free tier) → **API Keys** → create
+   one. Sending is sandboxed to your own Resend account's email until you
+   verify a sending domain under **Domains** — do that before relying on
+   this for the whole team.
+3. **Who gets emailed**: the `team_contacts` table maps a ticket assignee's
+   name (as it appears in the Team tab / assignee dropdown) to their email.
+   Add/update rows there as the roster changes — there's no UI for it yet.
+4. Fill in `SLACK_WEBHOOK_URL`, `RESEND_API_KEY`, and a `WEBHOOK_SECRET`
+   (any random string) at the top of `supabase/functions/notify-ticket/index.ts`,
+   deploy it (`supabase functions deploy notify-ticket` or via the
+   dashboard), then put the **same** `WEBHOOK_SECRET` into
+   `dispatch_ticket_notification()` in `schema.sql` and re-run that
+   function's `create or replace`. The two secrets have to match — the
+   function rejects any call whose `x-webhook-secret` header doesn't equal it.
+
 **To test realtime**: open the app in two browser tabs (or two browsers),
 pick a different name in each. Toggle a status and Save in one tab — the
 other tab updates live if it has no unsaved changes of its own, or shows a
@@ -112,6 +136,13 @@ while production stayed frozen on whatever build last succeeded.
 
 ## Known limits (be aware of these before relying on it)
 
+- **Slack/Resend credentials are embedded in the deployed Edge Function
+  source, not stored as env secrets.** No secrets-manager tool was
+  available to set them properly. Not exposed to the browser (Edge
+  Functions run server-side), but rotating them means editing and
+  redeploying the function rather than just updating a secret. Also,
+  email delivery is sandboxed to one address until a sending domain is
+  verified in Resend — see the setup section above.
 - **Roles are mixed: real for Accounts & Logins, UI-level everywhere else.**
   Admins get a `role: admin` tag stamped into their account automatically on
   sign-up if their email is in `public.app_admins` — managed from the app's

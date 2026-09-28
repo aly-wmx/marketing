@@ -126,6 +126,8 @@ const initTeam = () => [
     tasks: [{ t: "Watermark Instagram content gap", s: "not_started" }, { t: "Manolo TikTok launch content", s: "not_started" }] },
   { id: "jeff", name: "Jeff", role: "Marketing Director — high-production film", biz: ["wm", "mn", "gh", "tf"], vendor: false,
     tasks: [{ t: "Q3 brand film scope", s: "not_started" }] },
+  { id: "jason", name: "Jason", role: "Team", biz: ["wm", "mn", "gh", "tf"], vendor: false, tasks: [] },
+  { id: "nick", name: "Nick", role: "Team", biz: ["wm", "mn", "gh", "tf"], vendor: false, tasks: [] },
   { id: "bluecollar", name: "Blue Collar Media Group", role: "Vendor — paid social (FB/IG/YouTube/LinkedIn)", biz: ["wm"], vendor: true,
     tasks: [{ t: "Clarify $200/mo pixel line item", s: "not_started" }] },
   { id: "spagenie", name: "Spa Genie", role: "Vendor — Meta ads (Manolo only)", biz: ["mn"], vendor: true,
@@ -680,11 +682,12 @@ function AccountsTab() {
   );
 }
 
-function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, onStatus, onRemove, onAddComment, onReassign, dragging, onDragStart, onDragEnd }) {
+function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, contacts, onStatus, onRemove, onAddComment, onReassign, dragging, onDragStart, onDragEnd }) {
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState("");
   const b = bizById(t.biz);
-  const mailto = `mailto:ops@wmx.com?subject=${encodeURIComponent(`[${t.type}] ${t.title}`)}&body=${encodeURIComponent(`${t.details}\n\n— ${t.submitter || "Unknown"} (${b.name})`)}`;
+  const assigneeEmail = t.assignee ? contacts[t.assignee] : null;
+  const mailto = `mailto:${assigneeEmail || "ops@wmx.com"}?subject=${encodeURIComponent(`[${t.type}] ${t.title}`)}&body=${encodeURIComponent(`${t.details}\n\n— ${t.submitter || "Unknown"} (${b.name})`)}`;
   const overdue = !!t.dueDate && t.status !== "resolved" && t.dueDate < new Date().toISOString().slice(0, 10);
   const comments = t.comments || [];
 
@@ -745,7 +748,7 @@ function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, onS
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
         <a href={mailto} className="wmx-body" style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 4, color: C.brass, textDecoration: "none" }}>
-          <Mail size={12} /> Notify Aly
+          <Mail size={12} /> {t.assignee ? `Email ${t.assignee}` : "Email ops"}
         </a>
         <div style={{ display: "flex", gap: 4 }}>
           {nextCol && (
@@ -773,6 +776,15 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   const [search, setSearch] = useState("");
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
+  const [contacts, setContacts] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from("team_contacts").select("name, email").then(({ data, error }) => {
+      if (!error && !cancelled) setContacts(Object.fromEntries((data || []).map((r) => [r.name, r.email])));
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const addTicket = () => {
     if (!form.title.trim()) return;
@@ -930,7 +942,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
                 {items.map((t) => {
                   const nextCol = col.id === "open" ? "in_progress" : col.id === "in_progress" ? "resolved" : null;
                   return (
-                    <TicketCard key={t.id} t={t} col={col} nextCol={nextCol} canDelete={canDelete} userName={userName} assignableNames={assignableNames}
+                    <TicketCard key={t.id} t={t} col={col} nextCol={nextCol} canDelete={canDelete} userName={userName} assignableNames={assignableNames} contacts={contacts}
                       dragging={draggingId === t.id}
                       onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)}
                       onStatus={setStatus} onRemove={remove} onAddComment={addComment} onReassign={reassign} />

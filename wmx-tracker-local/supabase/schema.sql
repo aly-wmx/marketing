@@ -232,3 +232,67 @@ $$;
 
 revoke all on function public.admin_set_role(text, boolean) from public;
 grant execute on function public.admin_set_role(text, boolean) to authenticated;
+
+-- Ticket-assignment notifications, pushed to Slack + email via the
+-- notify-ticket Edge Function (supabase/functions/notify-ticket/index.ts).
+create table if not exists public.team_contacts (
+  name text primary key,
+  email text not null
+);
+
+alter table public.team_contacts enable row level security;
+
+-- Readable by anyone signed in (not just admins) — it's just names/emails,
+-- and the app's "Email <assignee>" button on every ticket needs it too.
+drop policy if exists "authenticated_select" on public.team_contacts;
+create policy "authenticated_select" on public.team_contacts
+  for select
+  to authenticated
+  using (true);
+
+-- insert/update the real roster here — matches whatever names appear in
+-- the Team tab / ticket assignee dropdown.
+insert into public.team_contacts (name, email) values
+  ('Aly', 'aly@wmx.group'),
+  ('Jeff', 'jeff@wmx.group'),
+  ('Jason', 'jason@wmx.group'),
+  ('Nick', 'nick@wmx.group')
+on conflict (name) do update set email = excluded.email;
+
+create extension if not exists pg_net with schema extensions;
+
+-- Fires on every ticket_notifications insert (i.e. every ticket
+-- assignment) and hands off to the notify-ticket Edge Function. A shared
+-- secret (not a Supabase JWT) gates the function since this is a
+-- server-to-server call, not a client request — REPLACE_WITH_SHARED_SECRET
+-- below must match the WEBHOOK_SECRET the deployed function actually
+-- checks (real value isn't committed here, see the function file's notes).
+create or replace function public.dispatch_ticket_notification()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  perform net.http_post(
+    url := 'https://frfxjipxplzahgahlfpg.supabase.co/functions/v1/notify-ticket',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-webhook-secret', 'REPLACE_WITH_SHARED_SECRET'
+    ),
+    body := jsonb_build_object(
+      'ticket_id', new.ticket_id,
+      'recipient', new.recipient,
+      'title', new.title,
+      'biz', new.biz,
+      'created_by', new.created_by
+    )
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists dispatch_ticket_notification on public.ticket_notifications;
+create trigger dispatch_ticket_notification
+  after insert on public.ticket_notifications
+  for each row execute function public.dispatch_ticket_notification();
