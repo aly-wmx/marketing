@@ -156,3 +156,34 @@ begin
     alter publication supabase_realtime add table credential_accounts;
   end if;
 end $$;
+
+-- Activity feed: one row per discrete action (toggling a status, opening/
+-- moving/deleting a ticket, commenting, logging a follower count), shown
+-- live on the Activity tab — a real log instead of just "last edited by X".
+create table if not exists public.activity_log (
+  id uuid primary key default gen_random_uuid(),
+  actor text not null,
+  action text not null,
+  detail text,
+  biz text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.activity_log enable row level security;
+
+drop policy if exists "authenticated_all" on public.activity_log;
+create policy "authenticated_all" on public.activity_log
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'activity_log'
+  ) then
+    alter publication supabase_realtime add table activity_log;
+  end if;
+end $$;

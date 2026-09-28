@@ -3,7 +3,7 @@ import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
   ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
-  Share2, TrendingUp, TrendingDown, LogOut, Pencil,
+  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -257,7 +257,7 @@ function PageHeader({ eyebrow, title, right }) {
 
 /* ---------------------------------- tabs ------------------------------------ */
 
-function SetupProgress({ onboarding, setOnboarding }) {
+function SetupProgress({ onboarding, setOnboarding, logActivity }) {
   return (
     <>
       <PageHeader eyebrow="Onboarding" title="Setup Progress" />
@@ -278,9 +278,11 @@ function SetupProgress({ onboarding, setOnboarding }) {
               </div>
               <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub, margin: "12px 0 4px" }}>{done}/{items.length} tasks complete</div>
               <div>{items.map((item) => (
-                <StatusRow key={item.id} label={item.label} status={item.status} onClick={() =>
-                  setOnboarding((prev) => ({ ...prev, [b.id]: prev[b.id].map((it) => it.id === item.id ? { ...it, status: nextStatus(it.status) } : it) }))
-                } />
+                <StatusRow key={item.id} label={item.label} status={item.status} onClick={() => {
+                  const next = nextStatus(item.status);
+                  setOnboarding((prev) => ({ ...prev, [b.id]: prev[b.id].map((it) => it.id === item.id ? { ...it, status: next } : it) }));
+                  logActivity("update", `marked "${item.label}" ${STATUS_LABEL[next].toLowerCase()}`, b.id);
+                }} />
               ))}</div>
             </Card>
           );
@@ -290,9 +292,13 @@ function SetupProgress({ onboarding, setOnboarding }) {
   );
 }
 
-function TeamTab({ team, setTeam, canEdit }) {
-  const toggleTask = (memberId, idx) =>
-    setTeam((prev) => prev.map((m) => m.id !== memberId ? m : { ...m, tasks: m.tasks.map((t, i) => i === idx ? { ...t, s: nextStatus(t.s) } : t) }));
+function TeamTab({ team, setTeam, canEdit, logActivity }) {
+  const toggleTask = (memberId, idx) => {
+    const member = team.find((m) => m.id === memberId);
+    const next = nextStatus(member.tasks[idx].s);
+    setTeam((prev) => prev.map((m) => m.id !== memberId ? m : { ...m, tasks: m.tasks.map((t, i) => i === idx ? { ...t, s: next } : t) }));
+    logActivity("update", `marked "${member.tasks[idx].t}" ${STATUS_LABEL[next].toLowerCase()} for ${member.name}`);
+  };
   return (
     <>
       <PageHeader eyebrow={canEdit ? "Who's doing what" : "Who's doing what · admins only can edit"} title="Team" />
@@ -612,7 +618,7 @@ function TicketCard({ t, col, nextCol, canDelete, userName, onStatus, onRemove, 
   );
 }
 
-function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAssigned, canDelete }) {
+function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAssigned, canDelete, logActivity }) {
   const [showForm, setShowForm] = useState(false);
   const blankForm = () => ({ biz: "wm", type: "question", title: "", details: "", submitter: userName || "", assignee: "", priority: "medium", dueDate: "" });
   const [form, setForm] = useState(blankForm);
@@ -625,15 +631,28 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     const ticket = { ...form, id: `t${Date.now()}`, status: "open", created: "Today", comments: [] };
     setTickets((prev) => [...prev, ticket]);
     if (ticket.assignee) onTicketAssigned(ticket);
+    logActivity("create", `opened ticket "${ticket.title}"`, ticket.biz);
     setForm(blankForm());
     setShowForm(false);
   };
-  const setStatus = (id, status) => setTickets((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
-  const remove = (id) => setTickets((prev) => prev.filter((t) => t.id !== id));
-  const addComment = (id, text, by) => setTickets((prev) => prev.map((t) => t.id !== id ? t : {
-    ...t,
-    comments: [...(t.comments || []), { id: `c${Date.now()}`, by, text, at: new Date().toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) }],
-  }));
+  const setStatus = (id, status) => {
+    const ticket = tickets.find((t) => t.id === id);
+    setTickets((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
+    logActivity("update", `moved "${ticket.title}" to ${status.replace("_", " ")}`, ticket.biz);
+  };
+  const remove = (id) => {
+    const ticket = tickets.find((t) => t.id === id);
+    setTickets((prev) => prev.filter((t) => t.id !== id));
+    logActivity("delete", `deleted ticket "${ticket.title}"`, ticket.biz);
+  };
+  const addComment = (id, text, by) => {
+    const ticket = tickets.find((t) => t.id === id);
+    setTickets((prev) => prev.map((t) => t.id !== id ? t : {
+      ...t,
+      comments: [...(t.comments || []), { id: `c${Date.now()}`, by, text, at: new Date().toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) }],
+    }));
+    logActivity("comment", `commented on "${ticket.title}"`, ticket.biz);
+  };
 
   const columns = [
     { id: "open", label: "Open", accent: C.brass },
@@ -774,7 +793,7 @@ function SocialPlatformRow({ platform, latest, previous, onLog }) {
   );
 }
 
-function SocialTab() {
+function SocialTab({ logActivity }) {
   const [brands, setBrands] = useState([]);
   const [platforms, setPlatforms] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
@@ -843,10 +862,14 @@ function SocialTab() {
         )
         .select();
       if (error) throw error;
+      const platform = platforms.find((p) => p.id === platformId);
+      const slug = brands.find((b) => b.id === brandId)?.slug;
+      const bizId = Object.keys(BRAND_SLUG_BY_BIZ).find((id) => BRAND_SLUG_BY_BIZ[id] === slug);
+      logActivity("log", `logged ${followers.toLocaleString()} ${platform?.name || "followers"}`, bizId);
     } catch (e) {
       console.error("Could not log follower count:", e.message ?? e);
     }
-  }, []);
+  }, [brands, platforms, logActivity]);
 
   return (
     <>
@@ -905,7 +928,74 @@ const TABS = [
   { id: "saas", label: "SaaS & Billing", icon: CreditCard },
   { id: "accounts", label: "Accounts & Logins", icon: KeyRound },
   { id: "tickets", label: "Tickets", icon: Inbox },
+  { id: "activity", label: "Activity", icon: ActivityIcon },
 ];
+
+const ACTIVITY_ICON_COLOR = { create: C.good, update: C.brass, delete: C.warn, comment: C.navy, assign: C.brass, log: C.pine };
+
+function ActivityTab() {
+  const [entries, setEntries] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: rows, error } = await supabase
+          .from("activity_log")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (error) throw error;
+        if (!cancelled) setEntries(rows || []);
+      } catch (e) {
+        console.warn("Could not load activity:", e.message ?? e);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("activity_log_changes")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, (payload) => {
+        setEntries((prev) => [payload.new, ...prev].slice(0, 100));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  return (
+    <>
+      <PageHeader eyebrow="Who did what, across the whole app" title="Activity" />
+      {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading…</div>}
+      {loaded && entries.length === 0 && (
+        <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub }}>Nothing logged yet — actions across the app will show up here live.</div>
+      )}
+      <Card style={{ padding: 4 }}>
+        {entries.map((e, i) => {
+          const b = e.biz ? bizById(e.biz) : null;
+          return (
+            <div key={e.id} style={{ display: "flex", gap: 10, padding: "10px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.line}` }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: ACTIVITY_ICON_COLOR[e.action] || C.sub, marginTop: 5, flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div className="wmx-body" style={{ fontSize: 13, color: C.ink }}>
+                  <b>{e.actor}</b> {e.detail}
+                  {b && <span style={{ color: C.sub }}> · {b.name}</span>}
+                </div>
+                <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, marginTop: 1 }}>
+                  {new Date(e.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+    </>
+  );
+}
 
 function GoogleGlyph() {
   return (
@@ -1185,6 +1275,13 @@ export default function WMXTracker() {
   };
 
   const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  // fire-and-forget: one row per discrete action, shown live on the Activity tab.
+  const logActivity = useCallback((action, detail, biz) => {
+    supabase.from("activity_log").insert({ actor: userName || "Unknown", action, detail, biz }).then(({ error }) => {
+      if (error) console.error("Could not log activity:", error.message);
+    });
+  }, [userName]);
 
   // ticket assignment: write one row per assignment, the recipient's own
   // browser tab picks it up over the realtime channel below.
@@ -1500,14 +1597,15 @@ export default function WMXTracker() {
               </div>
             </div>
           )}
-          {tab === "setup" && <SetupProgress onboarding={data.onboarding} setOnboarding={setOnboarding} />}
-          {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} canEdit={isAdmin} />}
+          {tab === "setup" && <SetupProgress onboarding={data.onboarding} setOnboarding={setOnboarding} logActivity={logActivity} />}
+          {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} canEdit={isAdmin} logActivity={logActivity} />}
           {tab === "stack" && <StackTab stack={STACK} />}
           {tab === "kpis" && <KpiTab kpis={data.kpis} setKpis={setKpis} />}
-          {tab === "social" && <SocialTab />}
+          {tab === "social" && <SocialTab logActivity={logActivity} />}
           {tab === "saas" && <SaasTab saas={SAAS} />}
           {tab === "accounts" && isAdmin && <AccountsTab />}
-          {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} canDelete={isAdmin} />}
+          {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} canDelete={isAdmin} logActivity={logActivity} />}
+          {tab === "activity" && <ActivityTab />}
 
           <div className="wmx-body" style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", fontSize: 11, color: C.sub, flexWrap: "wrap", gap: 6 }}>
             <span>WMX Management Group — internal tool</span>
