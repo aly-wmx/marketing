@@ -1307,7 +1307,7 @@ function ActivityTab() {
 // it already exists (the sign-up trigger only stamps role at account
 // creation, so a role change after that has to happen here instead).
 function AdminTab({ userEmail, logActivity }) {
-  const [admins, setAdmins] = useState([]);
+  const [accounts, setAccounts] = useState([]); // [{ email, role, joined }] — every real account, plus any pre-authorized email that hasn't signed in yet
   const [loaded, setLoaded] = useState(false);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1315,12 +1315,23 @@ function AdminTab({ userEmail, logActivity }) {
 
   const load = useCallback(async () => {
     try {
-      const { data: rows, error: err } = await supabase.from("app_admins").select("email").order("email");
-      if (err) throw err;
-      setAdmins((rows || []).map((r) => r.email));
+      const [{ data: userRows, error: userErr }, { data: adminRows, error: adminErr }] = await Promise.all([
+        supabase.rpc("admin_list_users"),
+        supabase.from("app_admins").select("email"),
+      ]);
+      if (userErr) throw userErr;
+      if (adminErr) throw adminErr;
+      const merged = {};
+      (userRows || []).forEach((u) => {
+        merged[u.email] = { email: u.email, role: u.role === "admin" ? "admin" : "member", joined: true };
+      });
+      (adminRows || []).forEach((r) => {
+        if (!merged[r.email]) merged[r.email] = { email: r.email, role: "admin", joined: false };
+      });
+      setAccounts(Object.values(merged).sort((a, b) => a.email.localeCompare(b.email)));
       setError(null);
     } catch (e) {
-      setError(e.message ?? "Could not load the admin list.");
+      setError(e.message ?? "Could not load accounts.");
     } finally {
       setLoaded(true);
     }
@@ -1371,7 +1382,11 @@ function AdminTab({ userEmail, logActivity }) {
       </div>
 
       <Card style={{ padding: 18, marginBottom: 18 }}>
-        <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>Grant access</div>
+        <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>Pre-authorize a new admin</div>
+        <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub, marginBottom: 10 }}>
+          For someone who hasn't signed in yet — their account doesn't exist until they do, so it can't show up in the list below.
+          Already have an account? Just change their access level directly in the list instead.
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
           <FormField label="Email" span={2}>
             <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && grant()}
@@ -1389,30 +1404,29 @@ function AdminTab({ userEmail, logActivity }) {
             Grant
           </button>
         </div>
-        <div className="wmx-body" style={{ fontSize: 11, color: C.sub, marginTop: 8 }}>
-          "Admin" is the only access level right now — everyone else is a regular member with no elevated access.
-        </div>
         {error && <div className="wmx-body" style={{ fontSize: 12, color: C.warn, marginTop: 8 }}>{error}</div>}
       </Card>
 
-      <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>Current admins</div>
+      <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>All accounts</div>
       {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub }}>Loading…</div>}
       <Card style={{ padding: 4 }}>
-        {loaded && admins.length === 0 && (
-          <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, padding: 14 }}>No admins on the allowlist.</div>
+        {loaded && accounts.length === 0 && (
+          <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, padding: 14 }}>No accounts yet.</div>
         )}
-        {admins.map((a, i) => (
-          <div key={a} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.line}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <ShieldCheck size={14} color={C.brass} />
-              <span className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{a}</span>
-              <Pill color={C.brass} bg={C.brassSoft}>Admin</Pill>
-              {a === userEmail && <Pill color={C.sub} bg={C.bg}>You</Pill>}
+        {accounts.map((a, i) => (
+          <div key={a.email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.line}`, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {a.role === "admin" ? <ShieldCheck size={14} color={C.brass} /> : <Users size={14} color={C.sub} />}
+              <span className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{a.email}</span>
+              {!a.joined && <Pill color={C.sub} bg={C.bg}>Not signed in yet</Pill>}
+              {a.email === userEmail && <Pill color={C.sub} bg={C.bg}>You</Pill>}
             </div>
-            <button onClick={() => setRole(a, false)} disabled={busy} className="wmx-body wmx-focus"
-              style={{ fontSize: 11.5, fontWeight: 600, color: C.warn, background: "none", border: `1px solid ${C.line}`, borderRadius: 6, padding: "5px 10px", cursor: busy ? "default" : "pointer" }}>
-              Revoke
-            </button>
+            <select value={a.role} onChange={(e) => setRole(a.email, e.target.value === "admin")} disabled={busy}
+              className="wmx-body wmx-focus"
+              style={{ fontSize: 12, fontWeight: 600, padding: "5px 10px", borderRadius: 6, border: `1px solid ${a.role === "admin" ? C.brass : C.line}`, background: a.role === "admin" ? C.brassSoft : "transparent", color: a.role === "admin" ? C.brass : C.ink, cursor: busy ? "default" : "pointer" }}>
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
           </div>
         ))}
       </Card>

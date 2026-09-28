@@ -12,7 +12,7 @@ A real, running copy of the WMX tracker with:
 - **CSV export** — an "Export CSV" button on the KPIs and Social Media Hub tabs downloads the current data (all businesses) for a leadership update, no screenshotting required.
 - **Editable Stack and SaaS & Billing** — both are now inline-editable tables (business toggle-pills, Add/Remove row) instead of static read-only lists, synced and autosaved the same as everything else.
 - **Team filter** — a "filter by person" dropdown to see one teammate's card instead of the whole roster.
-- **Admin tab** (admin-only) — grant or revoke admin access by email, right from the app. Every change goes through a `security definer` Postgres function (`admin_set_role`) that re-checks admin status server-side and updates an existing account's role immediately, not just new sign-ups.
+- **Admin tab** (admin-only) — lists every real account (via `admin_set_role`/`admin_list_users`, both `security definer` Postgres functions that re-check admin status server-side) with an editable access-level dropdown per row, so any existing account's role can be changed directly, plus a way to pre-authorize an email that hasn't signed in yet.
 
 ## 1. Create a Supabase project (free tier is fine)
 

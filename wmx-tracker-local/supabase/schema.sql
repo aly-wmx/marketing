@@ -240,6 +240,31 @@ $$;
 revoke all on function public.admin_set_role(text, boolean) from public;
 grant execute on function public.admin_set_role(text, boolean) to authenticated;
 
+-- Lists every real account so the Admin tab can show and edit access level
+-- for all of them, not just the ones already on the admin allowlist.
+-- auth.users isn't queryable from the client at all normally — this is the
+-- only sanctioned way in, and it re-checks admin status itself regardless
+-- of who's allowed to call it.
+create or replace function public.admin_list_users()
+returns table(email text, role text, created_at timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only admins can list accounts.';
+  end if;
+  return query
+    select u.email::text, coalesce(u.raw_user_meta_data->>'role', 'member') as role, u.created_at
+    from auth.users u
+    order by u.email;
+end;
+$$;
+
+revoke all on function public.admin_list_users() from public;
+grant execute on function public.admin_list_users() to authenticated;
+
 -- Ticket-assignment notifications, pushed to Slack + email via the
 -- notify-ticket Edge Function (supabase/functions/notify-ticket/index.ts).
 create table if not exists public.team_contacts (
