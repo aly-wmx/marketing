@@ -1527,9 +1527,9 @@ function LoginScreen() {
   };
 
   return (
-    <div className="wmx-body" style={{ minHeight: "100%", background: C.navy, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <div className="wmx-body" style={{ minHeight: "100vh", width: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <style>{FONTS}</style>
-      <Card style={{ padding: "36px 32px 28px", maxWidth: 380, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.35)" }}>
+      <Card style={{ padding: "36px 32px 28px", maxWidth: 380, width: "100%", boxShadow: "0 8px 28px rgba(20,20,15,0.10)" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 26 }}>
           <img src={wmxCrest} alt="WMX" style={{ width: 68, height: 68, borderRadius: "50%", marginBottom: 16, boxShadow: `0 0 0 1px ${C.line}` }} />
           <div className="wmx-display" style={{ fontSize: 21, color: C.ink, lineHeight: 1.15 }}>Welcome to WMX</div>
