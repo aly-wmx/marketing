@@ -40,6 +40,8 @@ const FONTS = `
 .wmx-shell{display:flex;}
 .wmx-sidebar{width:250px;flex-shrink:0;}
 .wmx-nav{display:flex;flex-direction:column;gap:2px;}
+.wmx-nav-group{display:flex;flex-direction:column;gap:2px;}
+.wmx-nav-group-label{font-size:10px;text-transform:uppercase;letter-spacing:0.6px;color:${C.sub};padding:10px 12px 4px;font-weight:600;}
 .wmx-main{flex:1;padding:28px 32px;min-width:0;}
 .wmx-ticket-board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
 .wmx-form-grid{display:grid;grid-template-columns:1fr 1fr;}
@@ -47,6 +49,8 @@ const FONTS = `
   .wmx-shell{flex-direction:column;}
   .wmx-sidebar{width:100%;}
   .wmx-nav{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px;}
+  .wmx-nav-group{display:contents;}
+  .wmx-nav-group-label{display:none;}
   .wmx-main{padding:18px 16px;}
   .wmx-ticket-board{grid-template-columns:1fr;}
 }
@@ -1246,17 +1250,33 @@ function SocialTab({ logActivity }) {
 }
 
 /* --------------------------------- app shell -------------------------------- */
-const TABS = [
-  { id: "setup", label: "Setup Progress", icon: ListChecks },
-  { id: "team", label: "Team", icon: Users },
-  { id: "stack", label: "Stack", icon: Layers },
-  { id: "kpis", label: "KPIs", icon: BarChart3 },
-  { id: "social", label: "Social Media Hub", icon: Share2 },
-  { id: "saas", label: "SaaS & Billing", icon: CreditCard },
-  { id: "accounts", label: "Accounts & Logins", icon: KeyRound },
-  { id: "tickets", label: "Tickets", icon: Inbox },
-  { id: "activity", label: "Activity", icon: ActivityIcon },
-  { id: "admin", label: "Admin", icon: ShieldCheck },
+const TAB_GROUPS = [
+  {
+    label: "Work",
+    tabs: [
+      { id: "setup", label: "Setup Progress", icon: ListChecks },
+      { id: "tickets", label: "Tickets", icon: Inbox },
+      { id: "team", label: "Team", icon: Users },
+      { id: "kpis", label: "KPIs", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Reporting",
+    tabs: [
+      { id: "social", label: "Social Media Hub", icon: Share2 },
+      { id: "stack", label: "Stack", icon: Layers },
+      { id: "saas", label: "SaaS & Billing", icon: CreditCard },
+      { id: "activity", label: "Activity", icon: ActivityIcon },
+    ],
+  },
+  {
+    label: "Admin",
+    adminOnly: true,
+    tabs: [
+      { id: "accounts", label: "Accounts & Logins", icon: KeyRound },
+      { id: "admin", label: "Admin", icon: ShieldCheck },
+    ],
+  },
 ];
 
 const ACTIVITY_ICON_COLOR = { create: C.good, update: C.brass, delete: C.warn, comment: C.navy, assign: C.brass, log: C.pine };
@@ -2024,24 +2044,29 @@ export default function WMXTracker() {
         )}
 
         <nav className="wmx-nav">
-          {TABS.filter((t) => (t.id !== "accounts" && t.id !== "admin") || isAdmin).map((t) => {
-            const Icon = t.icon;
-            const active = tab === t.id;
-            const badge = t.id === "tickets" && openTicketCount > 0 ? openTicketCount : null;
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)} className="wmx-focus wmx-nav-btn"
-                style={{
-                  display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8,
-                  border: "none", cursor: "pointer", textAlign: "left",
-                  background: active ? C.brassSoft : undefined,
-                  borderLeft: active ? `3px solid ${C.brass}` : "3px solid transparent",
-                }}>
-                <Icon size={16} color={active ? C.brass : C.sub} />
-                <span className="wmx-body" style={{ fontSize: 13.5, fontWeight: active ? 600 : 500, color: active ? C.ink : C.sub, flex: 1 }}>{t.label}</span>
-                {badge && <span className="wmx-body" style={{ fontSize: 10.5, fontWeight: 700, color: "#fff", background: C.brass, borderRadius: 999, padding: "1px 6px" }}>{badge}</span>}
-              </button>
-            );
-          })}
+          {TAB_GROUPS.filter((g) => !g.adminOnly || isAdmin).map((group) => (
+            <div key={group.label} className="wmx-nav-group">
+              <div className="wmx-nav-group-label">{group.label}</div>
+              {group.tabs.map((t) => {
+                const Icon = t.icon;
+                const active = tab === t.id;
+                const badge = t.id === "tickets" && openTicketCount > 0 ? openTicketCount : null;
+                return (
+                  <button key={t.id} onClick={() => setTab(t.id)} className="wmx-focus wmx-nav-btn"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8,
+                      border: "none", cursor: "pointer", textAlign: "left",
+                      background: active ? C.brassSoft : undefined,
+                      borderLeft: active ? `3px solid ${C.brass}` : "3px solid transparent",
+                    }}>
+                    <Icon size={16} color={active ? C.brass : C.sub} />
+                    <span className="wmx-body" style={{ fontSize: 13.5, fontWeight: active ? 600 : 500, color: active ? C.ink : C.sub, flex: 1 }}>{t.label}</span>
+                    {badge && <span className="wmx-body" style={{ fontSize: 10.5, fontWeight: 700, color: "#fff", background: C.brass, borderRadius: 999, padding: "1px 6px" }}>{badge}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div style={{ marginTop: "auto", paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
