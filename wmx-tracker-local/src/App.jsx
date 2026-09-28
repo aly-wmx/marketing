@@ -746,10 +746,39 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   );
 }
 
-function SocialPlatformRow({ platform, latest, previous, onLog }) {
+// A single-series trend line — thin 2px stroke, rounded end, no axes/gridlines
+// (recessive by design for a compact embedded sparkline), native <title> tags
+// on each point stand in for a hover tooltip without extra chart machinery.
+function Sparkline({ points, color }) {
+  const width = 120, height = 30;
+  if (points.length < 2) {
+    return <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, height, display: "flex", alignItems: "center" }}>Not enough data yet for a trend line</div>;
+  }
+  const values = points.map((p) => p.followers);
+  const min = Math.min(...values);
+  const range = Math.max(...values) - min || 1;
+  const stepX = width / (points.length - 1);
+  const coords = points.map((p, i) => [i * stepX, height - ((p.followers - min) / range) * height]);
+  const path = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const [lastX, lastY] = coords[coords.length - 1];
+  return (
+    <svg width={width} height={height} style={{ display: "block", overflow: "visible" }}>
+      <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastX} cy={lastY} r={2.5} fill={color} />
+      {coords.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={6} fill="transparent">
+          <title>{`${points[i].week_ending}: ${points[i].followers.toLocaleString()}`}</title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
+function SocialPlatformRow({ platform, history, latest, previous, onLog }) {
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const delta = latest && previous ? latest.followers - previous.followers : null;
+  const trendPoints = useMemo(() => [...history].reverse(), [history]);
 
   const submit = async () => {
     const n = parseInt(value, 10);
@@ -779,6 +808,9 @@ function SocialPlatformRow({ platform, latest, previous, onLog }) {
       </div>
       <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, marginTop: 2 }}>
         {latest ? `as of ${latest.week_ending}` : "no data logged yet"}
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <Sparkline points={trendPoints} color={platform.color_hex || C.brass} />
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
         <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New count" type="number" min="0"
@@ -904,6 +936,7 @@ function SocialTab({ logActivity }) {
                   <SocialPlatformRow
                     key={p.id}
                     platform={p}
+                    history={history}
                     latest={history[0] || null}
                     previous={history[1] || null}
                     onLog={(followers) => logSnapshot(brandRow.id, p.id, followers)}
