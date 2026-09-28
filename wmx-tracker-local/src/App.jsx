@@ -1605,8 +1605,9 @@ function LoginScreen() {
 function NamePrompt({ current, onChoose, onCancel }) {
   const [draft, setDraft] = useState("");
   return (
-    <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.35)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}>
-      <Card style={{ padding: 28, maxWidth: 360, width: "100%" }}>
+    <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.35)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}
+      onClick={onCancel}>
+      <Card style={{ padding: 28, maxWidth: 360, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div className="wmx-display" style={{ fontSize: 18, color: C.ink, marginBottom: 6 }}>Change your display name</div>
         <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
           Labels your changes for the team (e.g. "Aly updated 2 min ago") and lets teammates assign you tickets. Currently: <b>{current}</b>
@@ -1639,8 +1640,9 @@ function OnboardingTour({ onDismiss }) {
     { icon: Save, title: "Autosave", body: "Changes save automatically a couple seconds after you stop — no need to remember to hit Save." },
   ];
   return (
-    <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}>
-      <Card style={{ padding: 28, maxWidth: 440, width: "100%" }}>
+    <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}
+      onClick={onDismiss}>
+      <Card style={{ padding: 28, maxWidth: 440, width: "100%" }} onClick={(e) => e.stopPropagation()}>
         <div className="wmx-display" style={{ fontSize: 20, color: C.ink, marginBottom: 4 }}>Welcome to WMX Marketing Tracker</div>
         <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 18 }}>
           A quick look at how this works before you dive in.
