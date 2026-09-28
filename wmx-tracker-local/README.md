@@ -106,13 +106,18 @@ while production stayed frozen on whatever build last succeeded.
 
 ## Known limits (be aware of these before relying on it)
 
-- **Anyone with a `@wmx.group` account gets full access.** Sign-up is
-  restricted to that domain (a Postgres trigger on `auth.users`, so it can't
-  be bypassed client-side), and RLS requires `authenticated` on every table —
-  but there's no role/permission tiering beyond that yet. Any signed-in
-  `@wmx.group` account can read and write everything, including client
-  passwords in Accounts & Logins. Add role-based access before this includes
-  people you don't fully trust with all of it.
+- **Roles are UI-level, not database-enforced.** Admins (`aly`, `jeff`,
+  `jason`, `nick` @wmx.group — managed via the `public.app_admins` table)
+  get a `role: admin` tag stamped into their account on sign-up and can see
+  Accounts & Logins, delete tickets, and edit the Team tab's task statuses.
+  Everyone else has those hidden/disabled in the UI. This is real for a
+  small trusted team, but it isn't a hard security boundary — all app data
+  lives in one shared JSON blob (`tracker_state.data`) with a single
+  table-wide RLS policy requiring only `authenticated`, so there's no way to
+  enforce "only admins can write this JSON key" at the database layer
+  without splitting each tab into its own table with its own RLS policy
+  (the bigger schema rewrite noted below). Add a real DB-level admin allowlist
+  before this includes people you don't fully trust with all of it.
 - **One shared row, not normalized tables.** Simplest possible model to get
   realtime + attribution working fast. If this grows past a small team, the
   fuller relational schema in `wmx-tracker-build-spec.md` (separate tables

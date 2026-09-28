@@ -231,12 +231,12 @@ function Ring({ pct, size = 72, color }) {
   );
 }
 
-function StatusRow({ label, status, onClick }) {
+function StatusRow({ label, status, onClick, disabled }) {
   const Icon = status === "done" ? CheckCircle2 : status === "in_progress" ? CircleDot : Circle;
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${C.line}` }}>
       <span className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{label}</span>
-      <button onClick={onClick} className="wmx-focus" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", padding: "2px 6px", borderRadius: 6 }}>
+      <button onClick={disabled ? undefined : onClick} disabled={disabled} className="wmx-focus" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: disabled ? "default" : "pointer", padding: "2px 6px", borderRadius: 6 }}>
         <Icon size={15} color={STATUS_COLOR[status]} />
         <span className="wmx-body" style={{ fontSize: 11.5, color: STATUS_COLOR[status] }}>{STATUS_LABEL[status]}</span>
       </button>
@@ -295,12 +295,12 @@ function SetupProgress({ onboarding, setOnboarding }) {
   );
 }
 
-function TeamTab({ team, setTeam }) {
+function TeamTab({ team, setTeam, canEdit }) {
   const toggleTask = (memberId, idx) =>
     setTeam((prev) => prev.map((m) => m.id !== memberId ? m : { ...m, tasks: m.tasks.map((t, i) => i === idx ? { ...t, s: nextStatus(t.s) } : t) }));
   return (
     <>
-      <PageHeader eyebrow="Who's doing what" title="Team" />
+      <PageHeader eyebrow={canEdit ? "Who's doing what" : "Who's doing what · admins only can edit"} title="Team" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 16 }}>
         {team.map((m) => {
           const primaryColor = m.vendor ? C.brass : bizById(m.biz[0]).color;
@@ -319,7 +319,7 @@ function TeamTab({ team, setTeam }) {
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap", margin: "12px 0" }}>
                 {m.biz.map((id) => { const b = bizById(id); return <Pill key={id} color={b.color} bg={b.soft}>{b.name}</Pill>; })}
               </div>
-              <div>{m.tasks.map((t, i) => <StatusRow key={i} label={t.t} status={t.s} onClick={() => toggleTask(m.id, i)} />)}</div>
+              <div>{m.tasks.map((t, i) => <StatusRow key={i} label={t.t} status={t.s} onClick={() => toggleTask(m.id, i)} disabled={!canEdit} />)}</div>
             </Card>
           );
         })}
@@ -499,7 +499,7 @@ function AccountsTab({ accounts, setAccounts }) {
   );
 }
 
-function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAssigned }) {
+function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAssigned, canDelete }) {
   const [showForm, setShowForm] = useState(false);
   const blankForm = () => ({ biz: "wm", type: "question", title: "", details: "", submitter: userName || "", assignee: "" });
   const [form, setForm] = useState(blankForm);
@@ -585,9 +585,11 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
                               <ChevronRight size={15} color={C.sub} />
                             </button>
                           )}
-                          <button onClick={() => remove(t.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
-                            <Trash2 size={13} color={C.sub} />
-                          </button>
+                          {canDelete && (
+                            <button onClick={() => remove(t.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+                              <Trash2 size={13} color={C.sub} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </Card>
@@ -1035,6 +1037,7 @@ export default function WMXTracker() {
   };
 
   const userName = useMemo(() => deriveDisplayName(session), [session]);
+  const isAdmin = session?.user?.user_metadata?.role === "admin";
 
   // First time we see an account with no display_name saved yet (a fresh
   // Google sign-in, or an old account from before sign-up asked for a name),
@@ -1274,6 +1277,7 @@ export default function WMXTracker() {
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.good }} title="You're connected" />
             <span className="wmx-body" style={{ fontSize: 12, color: C.ink, fontWeight: 600 }}>{userName}</span>
+            {isAdmin && <Pill color={C.brass} bg={C.brassSoft}>Admin</Pill>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button onClick={() => { setTab("tickets"); setUnreadCount(0); }} className="wmx-focus" title="Tickets assigned to you"
@@ -1324,7 +1328,7 @@ export default function WMXTracker() {
         )}
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {TABS.map((t) => {
+          {TABS.filter((t) => t.id !== "accounts" || isAdmin).map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
             const badge = t.id === "tickets" && openTicketCount > 0 ? openTicketCount : null;
@@ -1380,13 +1384,13 @@ export default function WMXTracker() {
             </div>
           )}
           {tab === "setup" && <SetupProgress onboarding={data.onboarding} setOnboarding={setOnboarding} />}
-          {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} />}
+          {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} canEdit={isAdmin} />}
           {tab === "stack" && <StackTab stack={STACK} />}
           {tab === "kpis" && <KpiTab kpis={data.kpis} setKpis={setKpis} />}
           {tab === "social" && <SocialTab />}
           {tab === "saas" && <SaasTab saas={SAAS} />}
-          {tab === "accounts" && <AccountsTab accounts={data.accounts} setAccounts={setAccounts} />}
-          {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} />}
+          {tab === "accounts" && isAdmin && <AccountsTab accounts={data.accounts} setAccounts={setAccounts} />}
+          {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} canDelete={isAdmin} />}
 
           <div className="wmx-body" style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", fontSize: 11, color: C.sub, flexWrap: "wrap", gap: 6 }}>
             <span>WMX Management Group — internal tool</span>
