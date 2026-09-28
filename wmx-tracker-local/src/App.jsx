@@ -33,6 +33,8 @@ const FONTS = `
 .wmx-focus:focus-visible{outline:2px solid ${C.brass};outline-offset:2px;}
 .wmx-nav-btn{background:transparent;transition:background .12s;}
 .wmx-nav-btn:hover{background:${C.bg};}
+.wmx-icon-btn{background:transparent;border-radius:6px;transition:background .12s;}
+.wmx-icon-btn:hover{background:${C.bg};}
 .wmx-spin{animation:wmx-spin .8s linear infinite;}
 @keyframes wmx-spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .wmx-shell{display:flex;}
@@ -271,7 +273,7 @@ function StatusRow({ label, status, onClick, disabled }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${C.line}` }}>
       <span className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{label}</span>
-      <button onClick={disabled ? undefined : onClick} disabled={disabled} className="wmx-focus" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: disabled ? "default" : "pointer", padding: "2px 6px", borderRadius: 6 }}>
+      <button onClick={disabled ? undefined : onClick} disabled={disabled} className="wmx-focus wmx-icon-btn" style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: disabled ? "default" : "pointer", padding: "2px 6px" }}>
         <Icon size={15} color={STATUS_COLOR[status]} />
         <span className="wmx-body" style={{ fontSize: 11.5, color: STATUS_COLOR[status] }}>{STATUS_LABEL[status]}</span>
       </button>
@@ -444,7 +446,8 @@ function StackTab({ stack, setStack, logActivity }) {
                 <td><input value={s.status} onChange={(e) => update(s.id, "status", e.target.value)} placeholder="—"
                   className="wmx-focus" style={{ ...cellInput, color: s.status.startsWith("needs") ? C.warn : C.sub, fontStyle: s.status.startsWith("future") ? "italic" : "normal" }} /></td>
                 <td>
-                  <button onClick={() => removeRow(s.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                  <button onClick={() => removeRow(s.id)} aria-label={`Remove ${s.name || "tool"}`} title={`Remove ${s.name || "tool"}`}
+                    className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
                     <Trash2 size={13} color={C.sub} />
                   </button>
                 </td>
@@ -502,8 +505,8 @@ function KpiTab({ kpis, setKpis }) {
           const isOpen = !!open[cat.id];
           return (
             <Card key={cat.id} style={{ padding: 0, overflow: "hidden" }}>
-              <button onClick={() => setOpen((o) => ({ ...o, [cat.id]: !o[cat.id] }))} className="wmx-focus"
-                style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", background: "none", border: "none", cursor: "pointer" }}>
+              <button onClick={() => setOpen((o) => ({ ...o, [cat.id]: !o[cat.id] }))} aria-expanded={isOpen} className="wmx-focus wmx-icon-btn"
+                style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", border: "none", cursor: "pointer" }}>
                 <span className="wmx-display" style={{ fontSize: 15, color: C.ink }}>{cat.name}</span>
                 {isOpen ? <ChevronUp size={16} color={C.sub} /> : <ChevronDown size={16} color={C.sub} />}
               </button>
@@ -590,7 +593,8 @@ function SaasTab({ saas, setSaas, logActivity }) {
                 <td><input value={s.notes} onChange={(e) => update(s.id, "notes", e.target.value)} placeholder="—"
                   className="wmx-focus" style={{ ...cellInput, color: s.notes?.toLowerCase().includes("confirm") ? C.warn : C.sub }} /></td>
                 <td>
-                  <button onClick={() => removeRow(s.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                  <button onClick={() => removeRow(s.id)} aria-label={`Remove ${s.tool || "tool"}`} title={`Remove ${s.tool || "tool"}`}
+                    className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
                     <Trash2 size={13} color={C.sub} />
                   </button>
                 </td>
@@ -667,7 +671,8 @@ function AccountsTab() {
                   <div className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{a.username}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
                     <span style={{ fontFamily: "monospace", fontSize: 13, color: C.ink }}>{shown[a.id] ? a.password : "••••••••"}</span>
-                    <button onClick={() => toggle(a.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+                    <button onClick={() => toggle(a.id)} aria-label={shown[a.id] ? `Hide password for ${a.platform}` : `Show password for ${a.platform}`}
+                      className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 2 }}>
                       {shown[a.id] ? <EyeOff size={14} color={C.sub} /> : <Eye size={14} color={C.sub} />}
                     </button>
                   </div>
@@ -755,12 +760,14 @@ function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, con
         </a>
         <div style={{ display: "flex", gap: 4 }}>
           {nextCol && (
-            <button onClick={() => onStatus(t.id, nextCol)} title={`Move to ${nextCol.replace("_", " ")}`} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+            <button onClick={() => onStatus(t.id, nextCol)} title={`Move to ${nextCol.replace("_", " ")}`} aria-label={`Move "${t.title}" to ${nextCol.replace("_", " ")}`}
+              className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 2 }}>
               <ChevronRight size={15} color={C.sub} />
             </button>
           )}
           {canDelete && (
-            <button onClick={() => onRemove(t.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+            <button onClick={() => onRemove(t.id)} aria-label={`Delete ticket "${t.title}"`} title="Delete ticket"
+              className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 2 }}>
               <Trash2 size={13} color={C.sub} />
             </button>
           )}
@@ -1951,8 +1958,8 @@ export default function WMXTracker() {
             {isAdmin && <Pill color={C.brass} bg={C.brassSoft}>Admin</Pill>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button onClick={() => { setTab("tickets"); setUnreadCount(0); }} className="wmx-focus" title="Tickets assigned to you"
-              style={{ position: "relative", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
+            <button onClick={() => { setTab("tickets"); setUnreadCount(0); }} className="wmx-focus wmx-icon-btn" title="Tickets assigned to you" aria-label={`Tickets assigned to you${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
+              style={{ position: "relative", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
               <Bell size={15} color={unreadCount > 0 ? C.brass : C.sub} />
               {unreadCount > 0 && (
                 <span className="wmx-body" style={{ position: "absolute", top: -6, right: -7, fontSize: 9.5, fontWeight: 700, color: "#fff", background: C.warn, borderRadius: 999, padding: "0 4px", lineHeight: "13px", minWidth: 13, textAlign: "center" }}>
@@ -1960,12 +1967,12 @@ export default function WMXTracker() {
                 </span>
               )}
             </button>
-            <button onClick={() => setEditingName(true)} title="Change display name" className="wmx-focus"
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
+            <button onClick={() => setEditingName(true)} title="Change display name" aria-label="Change display name" className="wmx-focus wmx-icon-btn"
+              style={{ border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
               <Pencil size={12} color={C.sub} />
             </button>
-            <button onClick={() => supabase.auth.signOut()} title="Sign out" className="wmx-focus"
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
+            <button onClick={() => supabase.auth.signOut()} title="Sign out" aria-label="Sign out" className="wmx-focus wmx-icon-btn"
+              style={{ border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
               <LogOut size={13} color={C.sub} />
             </button>
           </div>
@@ -2084,7 +2091,7 @@ export default function WMXTracker() {
                   View ticket
                 </button>
               </div>
-              <button onClick={() => dismissToast(n.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, flexShrink: 0 }}>
+              <button onClick={() => dismissToast(n.id)} aria-label="Dismiss notification" className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 2, flexShrink: 0 }}>
                 <X size={13} color={C.sub} />
               </button>
             </div>
