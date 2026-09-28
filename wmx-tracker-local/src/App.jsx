@@ -3,7 +3,7 @@ import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
   ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
-  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download,
+  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download, ShieldCheck,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -970,58 +970,29 @@ function Sparkline({ points, color }) {
   );
 }
 
-function SocialPlatformRow({ platform, history, latest, previous, onLog }) {
-  const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
-  const delta = latest && previous ? latest.followers - previous.followers : null;
-  const trendPoints = useMemo(() => [...history].reverse(), [history]);
-
-  const submit = async () => {
-    const n = parseInt(value, 10);
-    if (!Number.isFinite(n) || n < 0) return;
-    setSaving(true);
-    await onLog(n);
-    setSaving(false);
-    setValue("");
-  };
-
+function StatTile({ label, value, delta, color }) {
   return (
-    <div style={{ padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: platform.color_hex || C.sub }} />
-          <span className="wmx-body" style={{ fontSize: 12.5, color: C.ink, fontWeight: 600 }}>{platform.name}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span className="wmx-display" style={{ fontSize: 18, color: C.ink }}>{latest ? latest.followers.toLocaleString() : "—"}</span>
-          {delta !== null && delta !== 0 && (
-            <span className="wmx-body" style={{ fontSize: 11, fontWeight: 600, color: delta > 0 ? C.good : C.warn, display: "flex", alignItems: "center", gap: 2 }}>
-              {delta > 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-              {Math.abs(delta).toLocaleString()}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, marginTop: 2 }}>
-        {latest ? `as of ${latest.week_ending}` : "no data logged yet"}
-      </div>
-      <div style={{ marginTop: 6 }}>
-        <Sparkline points={trendPoints} color={platform.color_hex || C.brass} />
-      </div>
-      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="New count" type="number" min="0"
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          className="wmx-body wmx-focus" style={{ width: 110, padding: "5px 8px", border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12 }} />
-        <button onClick={submit} disabled={!value || saving} className="wmx-body wmx-focus"
-          style={{ fontSize: 11.5, fontWeight: 600, padding: "5px 10px", borderRadius: 6, border: "none", cursor: value ? "pointer" : "default", background: value ? C.ink : C.line, color: value ? "#fff" : C.sub }}>
-          {saving ? "…" : "Log"}
-        </button>
+    <div>
+      <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <div className="wmx-display" style={{ fontSize: 30, color }}>{value !== null && value !== undefined ? value.toLocaleString() : "—"}</div>
+        {delta !== null && delta !== undefined && delta !== 0 && (
+          <span className="wmx-body" style={{ fontSize: 12, fontWeight: 600, color: delta > 0 ? C.good : C.warn, display: "flex", alignItems: "center", gap: 2 }}>
+            {delta > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            {Math.abs(delta).toLocaleString()}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
 function SocialTab({ logActivity }) {
+  const [activeBiz, setActiveBiz] = useState(BUSINESSES[0].id);
+  const [activePlatform, setActivePlatform] = useState(null);
+  const [followersInput, setFollowersInput] = useState("");
+  const [engagementInput, setEngagementInput] = useState("");
+  const [saving, setSaving] = useState(false);
   const [brands, setBrands] = useState([]);
   const [platforms, setPlatforms] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
@@ -1034,7 +1005,7 @@ function SocialTab({ logActivity }) {
         const [{ data: brandRows }, { data: platformRows }, { data: snapshotRows }] = await Promise.all([
           supabase.from("brands").select("id, name, slug").order("name"),
           supabase.from("platforms").select("id, name, color_hex").order("name"),
-          supabase.from("weekly_snapshots").select("id, brand_id, platform_id, week_ending, followers, source, updated_at"),
+          supabase.from("weekly_snapshots").select("id, brand_id, platform_id, week_ending, followers, engagement, source, updated_at"),
         ]);
         if (!cancelled) {
           setBrands(brandRows || []);
@@ -1064,6 +1035,11 @@ function SocialTab({ logActivity }) {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // default to the first platform once they've loaded
+  useEffect(() => {
+    if (!activePlatform && platforms.length > 0) setActivePlatform(platforms[0].id);
+  }, [platforms, activePlatform]);
+
   const historyByKey = useMemo(() => {
     const map = {};
     snapshots.forEach((s) => {
@@ -1079,28 +1055,31 @@ function SocialTab({ logActivity }) {
     [historyByKey]
   );
 
-  const logSnapshot = useCallback(async (brandId, platformId, followers) => {
+  const logSnapshot = useCallback(async (brandId, platformId, followers, engagement) => {
     const weekEnding = new Date().toISOString().slice(0, 10);
     try {
+      const payload = { brand_id: brandId, platform_id: platformId, week_ending: weekEnding, source: "manual" };
+      if (followers !== null) payload.followers = followers;
+      if (engagement !== null) payload.engagement = engagement;
       const { error } = await supabase
         .from("weekly_snapshots")
-        .upsert(
-          { brand_id: brandId, platform_id: platformId, week_ending: weekEnding, followers, source: "manual" },
-          { onConflict: "brand_id,platform_id,week_ending" }
-        )
+        .upsert(payload, { onConflict: "brand_id,platform_id,week_ending" })
         .select();
       if (error) throw error;
       const platform = platforms.find((p) => p.id === platformId);
       const slug = brands.find((b) => b.id === brandId)?.slug;
       const bizId = Object.keys(BRAND_SLUG_BY_BIZ).find((id) => BRAND_SLUG_BY_BIZ[id] === slug);
-      logActivity("log", `logged ${followers.toLocaleString()} ${platform?.name || "followers"}`, bizId);
+      const parts = [];
+      if (followers !== null) parts.push(`${followers.toLocaleString()} followers`);
+      if (engagement !== null) parts.push(`${engagement.toLocaleString()} engagement`);
+      logActivity("log", `logged ${parts.join(" / ")} for ${platform?.name || "a platform"}`, bizId);
     } catch (e) {
-      console.error("Could not log follower count:", e.message ?? e);
+      console.error("Could not log stats:", e.message ?? e);
     }
   }, [brands, platforms, logActivity]);
 
   const exportCsv = () => {
-    const headers = ["Business", "Platform", "Followers", "As of", "Change vs previous"];
+    const headers = ["Business", "Platform", "Followers", "Engagement", "As of", "Follower change vs previous"];
     const rows = [];
     BUSINESSES.forEach((b) => {
       const brandRow = brands.find((row) => row.slug === BRAND_SLUG_BY_BIZ[b.id]);
@@ -1109,8 +1088,8 @@ function SocialTab({ logActivity }) {
         const history = historyByKey[`${brandRow.id}:${p.id}`] || [];
         const latest = history[0];
         if (!latest) return;
-        const delta = history[1] ? latest.followers - history[1].followers : "";
-        rows.push([b.name, p.name, latest.followers, latest.week_ending, delta]);
+        const delta = history[1] && latest.followers != null && history[1].followers != null ? latest.followers - history[1].followers : "";
+        rows.push([b.name, p.name, latest.followers ?? "", latest.engagement ?? "", latest.week_ending, delta]);
       });
     });
     downloadCsv(`wmx-social-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(headers, rows));
@@ -1136,36 +1115,91 @@ function SocialTab({ logActivity }) {
           No brands/platforms found in Supabase yet — nothing to show here.
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 16 }}>
-        {BUSINESSES.map((b) => {
-          const brandRow = brands.find((row) => row.slug === BRAND_SLUG_BY_BIZ[b.id]);
-          return (
-            <Card key={b.id} style={{ padding: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: b.color }} />
-                <span className="wmx-display" style={{ fontSize: 15, color: C.ink }}>{b.name}</span>
-              </div>
-              {!brandRow && (
-                <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub, marginTop: 8 }}>Not set up in Supabase yet.</div>
-              )}
-              {brandRow && platforms.map((p) => {
-                const key = `${brandRow.id}:${p.id}`;
-                const history = historyByKey[key] || [];
-                return (
-                  <SocialPlatformRow
-                    key={p.id}
-                    platform={p}
-                    history={history}
-                    latest={history[0] || null}
-                    previous={history[1] || null}
-                    onLog={(followers) => logSnapshot(brandRow.id, p.id, followers)}
-                  />
-                );
-              })}
-            </Card>
-          );
-        })}
-      </div>
+
+      {loaded && brands.length > 0 && (() => {
+        const brandRow = brands.find((row) => row.slug === BRAND_SLUG_BY_BIZ[activeBiz]);
+        const platform = platforms.find((p) => p.id === activePlatform);
+        const key = brandRow && platform ? `${brandRow.id}:${platform.id}` : null;
+        const history = key ? (historyByKey[key] || []) : [];
+        const latest = history[0] || null;
+        const previous = history[1] || null;
+        const followerDelta = latest?.followers != null && previous?.followers != null ? latest.followers - previous.followers : null;
+        const engagementDelta = latest?.engagement != null && previous?.engagement != null ? latest.engagement - previous.engagement : null;
+        const followerPoints = [...history].reverse().filter((h) => h.followers != null).map((h) => ({ week_ending: h.week_ending, followers: h.followers }));
+        const engagementPoints = [...history].reverse().filter((h) => h.engagement != null).map((h) => ({ week_ending: h.week_ending, followers: h.engagement }));
+
+        const submitLog = async () => {
+          const f = followersInput.trim() === "" ? null : parseInt(followersInput, 10);
+          const e = engagementInput.trim() === "" ? null : parseInt(engagementInput, 10);
+          if (f === null && e === null) return;
+          setSaving(true);
+          await logSnapshot(brandRow.id, platform.id, f, e);
+          setSaving(false);
+          setFollowersInput("");
+          setEngagementInput("");
+        };
+
+        return (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {BUSINESSES.map((b) => (
+                <button key={b.id} onClick={() => setActiveBiz(b.id)} className="wmx-body wmx-focus"
+                  style={{ fontSize: 13, fontWeight: 600, padding: "8px 14px", borderRadius: 8, border: `1px solid ${activeBiz === b.id ? b.color : C.line}`, background: activeBiz === b.id ? b.color : "transparent", color: activeBiz === b.id ? "#fff" : C.ink, cursor: "pointer" }}>
+                  {b.name}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
+              {platforms.map((p) => (
+                <button key={p.id} onClick={() => setActivePlatform(p.id)} className="wmx-body wmx-focus"
+                  style={{ fontSize: 12.5, fontWeight: 600, padding: "6px 12px", borderRadius: 999, border: `1px solid ${activePlatform === p.id ? (p.color_hex || C.brass) : C.line}`, background: activePlatform === p.id ? (p.color_hex || C.brass) : "transparent", color: activePlatform === p.id ? "#fff" : C.ink, cursor: "pointer" }}>
+                  {p.name}
+                </button>
+              ))}
+            </div>
+
+            {!brandRow && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub }}>{bizById(activeBiz).name} isn't set up in Supabase yet.</div>}
+
+            {brandRow && platform && (
+              <Card style={{ padding: 24 }}>
+                <div style={{ display: "flex", gap: 40, flexWrap: "wrap", marginBottom: 18 }}>
+                  <StatTile label="Followers" value={latest?.followers} delta={followerDelta} color={C.brass} />
+                  <StatTile label="Engagement" value={latest?.engagement} delta={engagementDelta} color={platform.color_hex || C.navy} />
+                </div>
+                <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, marginBottom: 14 }}>
+                  {latest ? `as of ${latest.week_ending}` : "no data logged yet"}
+                </div>
+                <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginBottom: 18 }}>
+                  <div>
+                    <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, marginBottom: 4 }}>Followers trend</div>
+                    <Sparkline points={followerPoints} color={C.brass} />
+                  </div>
+                  <div>
+                    <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, marginBottom: 4 }}>Engagement trend</div>
+                    <Sparkline points={engagementPoints} color={platform.color_hex || C.navy} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+                  <FormField label="Followers">
+                    <input value={followersInput} onChange={(e) => setFollowersInput(e.target.value)} placeholder="New count" type="number" min="0"
+                      onKeyDown={(e) => e.key === "Enter" && submitLog()}
+                      className="wmx-body wmx-focus" style={{ width: 120, padding: "6px 8px", border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12.5 }} />
+                  </FormField>
+                  <FormField label="Engagement">
+                    <input value={engagementInput} onChange={(e) => setEngagementInput(e.target.value)} placeholder="New count" type="number" min="0"
+                      onKeyDown={(e) => e.key === "Enter" && submitLog()}
+                      className="wmx-body wmx-focus" style={{ width: 120, padding: "6px 8px", border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12.5 }} />
+                  </FormField>
+                  <button onClick={submitLog} disabled={(!followersInput && !engagementInput) || saving} className="wmx-body wmx-focus"
+                    style={{ fontSize: 12.5, fontWeight: 600, padding: "7px 14px", borderRadius: 6, border: "none", cursor: (followersInput || engagementInput) ? "pointer" : "default", background: (followersInput || engagementInput) ? C.ink : C.line, color: (followersInput || engagementInput) ? "#fff" : C.sub }}>
+                    {saving ? "…" : "Log this week"}
+                  </button>
+                </div>
+              </Card>
+            )}
+          </>
+        );
+      })()}
     </>
   );
 }
@@ -1181,6 +1215,7 @@ const TABS = [
   { id: "accounts", label: "Accounts & Logins", icon: KeyRound },
   { id: "tickets", label: "Tickets", icon: Inbox },
   { id: "activity", label: "Activity", icon: ActivityIcon },
+  { id: "admin", label: "Admin", icon: ShieldCheck },
 ];
 
 const ACTIVITY_ICON_COLOR = { create: C.good, update: C.brass, delete: C.warn, comment: C.navy, assign: C.brass, log: C.pine };
@@ -1244,6 +1279,113 @@ function ActivityTab() {
             </div>
           );
         })}
+      </Card>
+    </>
+  );
+}
+
+// Admin-only: manage who has admin access. Direct writes to app_admins are
+// blocked for everyone (no insert/update/delete RLS policy on it) — every
+// change goes through the admin_set_role RPC, which re-checks admin status
+// server-side and also updates the target account's role in auth.users if
+// it already exists (the sign-up trigger only stamps role at account
+// creation, so a role change after that has to happen here instead).
+function AdminTab({ userEmail, logActivity }) {
+  const [admins, setAdmins] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const { data: rows, error: err } = await supabase.from("app_admins").select("email").order("email");
+      if (err) throw err;
+      setAdmins((rows || []).map((r) => r.email));
+    } catch (e) {
+      console.warn("Could not load admins:", e.message ?? e);
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("app_admins_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_admins" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [load]);
+
+  const setRole = async (targetEmail, makeAdmin) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { error: err } = await supabase.rpc("admin_set_role", { target_email: targetEmail, make_admin: makeAdmin });
+      if (err) throw err;
+      logActivity(makeAdmin ? "assign" : "delete", `${makeAdmin ? "granted" : "revoked"} admin access for ${targetEmail}`);
+      if (makeAdmin) setEmail("");
+      await load();
+    } catch (e) {
+      setError(e.message ?? "Could not update that account.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const grant = () => {
+    const clean = email.trim().toLowerCase();
+    if (!clean || !/^\S+@\S+\.\S+$/.test(clean)) { setError("Enter a valid email."); return; }
+    if (!clean.endsWith("@wmx.group")) { setError("Only @wmx.group accounts can be admins."); return; }
+    setRole(clean, true);
+  };
+
+  return (
+    <>
+      <PageHeader eyebrow="Admin only · who has full access" title="Admin" />
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.brassSoft, border: `1px solid ${C.brass}40`, borderRadius: 8, padding: 14, marginBottom: 18 }}>
+        <AlertTriangle size={16} color={C.brass} style={{ flexShrink: 0, marginTop: 2 }} />
+        <span className="wmx-body" style={{ fontSize: 12.5, color: C.ink }}>
+          Admins can see Accounts & Logins, delete tickets, edit Team task statuses, and grant/revoke admin access — including their own.
+          If an account already exists for the email, its access changes immediately; otherwise it takes effect the moment they first sign in.
+        </span>
+      </div>
+
+      <Card style={{ padding: 18, marginBottom: 18 }}>
+        <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>Grant admin access</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && grant()}
+            placeholder="name@wmx.group" type="email" className="wmx-body wmx-focus"
+            style={{ flex: 1, minWidth: 200, padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+          <button onClick={grant} disabled={busy} className="wmx-body wmx-focus"
+            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: busy ? "default" : "pointer", fontWeight: 600, fontSize: 13 }}>
+            Grant
+          </button>
+        </div>
+        {error && <div className="wmx-body" style={{ fontSize: 12, color: C.warn, marginTop: 8 }}>{error}</div>}
+      </Card>
+
+      <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>Current admins</div>
+      {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub }}>Loading…</div>}
+      <Card style={{ padding: 4 }}>
+        {loaded && admins.length === 0 && (
+          <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, padding: 14 }}>No admins on the allowlist.</div>
+        )}
+        {admins.map((a, i) => (
+          <div key={a} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.line}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <ShieldCheck size={14} color={C.brass} />
+              <span className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{a}</span>
+              {a === userEmail && <Pill color={C.sub} bg={C.bg}>You</Pill>}
+            </div>
+            <button onClick={() => setRole(a, false)} disabled={busy} className="wmx-body wmx-focus"
+              style={{ fontSize: 11.5, fontWeight: 600, color: C.warn, background: "none", border: `1px solid ${C.line}`, borderRadius: 6, padding: "5px 10px", cursor: busy ? "default" : "pointer" }}>
+              Revoke
+            </button>
+          </div>
+        ))}
       </Card>
     </>
   );
@@ -1804,7 +1946,7 @@ export default function WMXTracker() {
         )}
 
         <nav className="wmx-nav">
-          {TABS.filter((t) => t.id !== "accounts" || isAdmin).map((t) => {
+          {TABS.filter((t) => (t.id !== "accounts" && t.id !== "admin") || isAdmin).map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
             const badge = t.id === "tickets" && openTicketCount > 0 ? openTicketCount : null;
@@ -1868,6 +2010,7 @@ export default function WMXTracker() {
           {tab === "accounts" && isAdmin && <AccountsTab />}
           {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} canDelete={isAdmin} logActivity={logActivity} />}
           {tab === "activity" && <ActivityTab />}
+          {tab === "admin" && isAdmin && <AdminTab userEmail={session?.user?.email} logActivity={logActivity} />}
 
           <div className="wmx-body" style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", fontSize: 11, color: C.sub, flexWrap: "wrap", gap: 6 }}>
             <span>WMX Management Group — internal tool</span>

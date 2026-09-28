@@ -187,3 +187,48 @@ begin
     alter publication supabase_realtime add table activity_log;
   end if;
 end $$;
+
+-- Admin tab: lets an admin grant/revoke admin access from the app itself.
+-- app_admins already has RLS enabled with no write policy at all — every
+-- change goes through admin_set_role (security definer), which re-checks
+-- admin status server-side and also updates auth.users.raw_user_meta_data
+-- directly for an account that already exists (the sign-up trigger above
+-- only stamps role at account creation, so a later change needs this).
+drop policy if exists "admins_select" on public.app_admins;
+create policy "admins_select" on public.app_admins
+  for select
+  to authenticated
+  using (public.is_admin());
+
+create or replace function public.admin_set_role(target_email text, make_admin boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only admins can change roles.';
+  end if;
+  if target_email is null or target_email = '' then
+    raise exception 'An email is required.';
+  end if;
+
+  if make_admin then
+    insert into public.app_admins (email) values (lower(target_email))
+    on conflict (email) do nothing;
+  else
+    delete from public.app_admins where lower(email) = lower(target_email);
+  end if;
+
+  update auth.users
+  set raw_user_meta_data = case
+    when make_admin then coalesce(raw_user_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
+    else (coalesce(raw_user_meta_data, '{}'::jsonb) - 'role')
+  end
+  where lower(email) = lower(target_email);
+end;
+$$;
+
+revoke all on function public.admin_set_role(text, boolean) from public;
+grant execute on function public.admin_set_role(text, boolean) to authenticated;

@@ -5,11 +5,14 @@ A real, running copy of the WMX tracker with:
 - **Realtime sync** — when someone else saves, you see it live (or get asked before it overwrites your unsaved edits)
 - **Per-user attribution** — every save records who made it ("Last edited by Aly · 2:14 PM")
 - **Ticket assignment notifications** — assign a new ticket to a teammate and they get a live in-app banner (plus a desktop notification if their tab is in the background and they've allowed it)
-- **Social Media Hub** — a tab for tracking follower counts per brand/platform, backed by the `brands`/`platforms`/`weekly_snapshots` tables already provisioned in Supabase (manual entry for now, week-over-week deltas, a trend sparkline per platform, ready for an automated API sync later)
+- **Social Media Hub** — pick a business, pick a platform (Facebook/Instagram/LinkedIn/TikTok), see followers + engagement for that combo with week-over-week deltas and trend sparklines, backed by the `brands`/`platforms`/`weekly_snapshots` tables already provisioned in Supabase (manual entry for now, ready for an automated API sync later)
 - **Real login** — Supabase Auth gates the app: Google OAuth or an email/password account, not just a name label. Every table's RLS policy requires an authenticated session, so the data is actually protected, not just hidden behind a UI screen.
 - **Tickets with priority, due dates, and comments** — filterable by business/priority/title, sorted by priority then due date within each column. New tickets open in a labeled popup form; cards are drag-and-droppable directly between Open/In Progress/Resolved; reassigning a ticket (from the card itself, not just at creation) automatically notifies the new assignee.
 - **Activity feed** — a live log of discrete actions (status changes, ticket moves, comments, follower counts logged) across the whole app, not just a single "last edited by" line.
 - **CSV export** — an "Export CSV" button on the KPIs and Social Media Hub tabs downloads the current data (all businesses) for a leadership update, no screenshotting required.
+- **Editable Stack and SaaS & Billing** — both are now inline-editable tables (business toggle-pills, Add/Remove row) instead of static read-only lists, synced and autosaved the same as everything else.
+- **Team filter** — a "filter by person" dropdown to see one teammate's card instead of the whole roster.
+- **Admin tab** (admin-only) — grant or revoke admin access by email, right from the app. Every change goes through a `security definer` Postgres function (`admin_set_role`) that re-checks admin status server-side and updates an existing account's role immediately, not just new sign-ups.
 
 ## 1. Create a Supabase project (free tier is fine)
 
@@ -110,9 +113,9 @@ while production stayed frozen on whatever build last succeeded.
 ## Known limits (be aware of these before relying on it)
 
 - **Roles are mixed: real for Accounts & Logins, UI-level everywhere else.**
-  Admins (`aly`, `jeff`, `jason`, `nick` @wmx.group — managed via the
-  `public.app_admins` table) get a `role: admin` tag stamped into their
-  account automatically on sign-up. Accounts & Logins now lives in its own
+  Admins get a `role: admin` tag stamped into their account automatically on
+  sign-up if their email is in `public.app_admins` — managed from the app's
+  own **Admin** tab now (admin-only), not just by running SQL. Accounts & Logins now lives in its own
   `credential_accounts` table with an RLS policy that checks
   `public.is_admin()` — a non-admin account literally cannot read or write
   that table, not just a hidden tab. Deleting tickets and editing the Team
