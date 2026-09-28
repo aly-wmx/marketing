@@ -81,6 +81,13 @@ that project: **Settings → Environment Variables** → add the same two
 your local `.env.local`). Redeploy (`vercel --prod`) and you have a real URL
 anyone on the team can open.
 
+**If a build fails with `vite: command not found`**: check Project Settings
+→ General → Framework Settings → **Install Command**. If "Override" is on
+but the box is empty (just gray placeholder text), Vercel skips the install
+step entirely — type `npm install` into it and Save. This bit us for weeks
+on the `wmx-tracker-live` project: every deploy failed silently on this,
+while production stayed frozen on whatever build last succeeded.
+
 ## How the realtime piece actually works
 
 - Every browser tab opens a Supabase Realtime channel subscribed to
