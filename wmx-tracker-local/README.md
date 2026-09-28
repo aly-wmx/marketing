@@ -1,4 +1,4 @@
-# WMX Portfolio Control — realtime, Supabase-backed, deployable
+# WMX Marketing Tracker — realtime, Supabase-backed, deployable
 
 A real, running copy of the WMX tracker with:
 - **Persistence** — saved to Supabase, not just one browser

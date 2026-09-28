@@ -1533,7 +1533,7 @@ function LoginScreen() {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 26 }}>
           <img src={wmxCrest} alt="WMX" style={{ width: 68, height: 68, borderRadius: "50%", marginBottom: 16, boxShadow: `0 0 0 1px ${C.line}` }} />
           <div className="wmx-display" style={{ fontSize: 21, color: C.ink, lineHeight: 1.15 }}>Welcome to WMX</div>
-          <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginTop: 4 }}>Sign in to Portfolio Control</div>
+          <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginTop: 4 }}>Sign in to Marketing Tracker</div>
         </div>
 
         <button onClick={withGoogle} disabled={googleBusy} className="wmx-body wmx-focus"
@@ -1617,7 +1617,7 @@ function OnboardingTour({ onDismiss }) {
   return (
     <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}>
       <Card style={{ padding: 28, maxWidth: 440, width: "100%" }}>
-        <div className="wmx-display" style={{ fontSize: 20, color: C.ink, marginBottom: 4 }}>Welcome to WMX Portfolio Control</div>
+        <div className="wmx-display" style={{ fontSize: 20, color: C.ink, marginBottom: 4 }}>Welcome to WMX Marketing Tracker</div>
         <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 18 }}>
           A quick look at how this works before you dive in.
         </div>
@@ -1925,7 +1925,7 @@ export default function WMXTracker() {
           <img src={wmxCrest} alt="" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
           <div>
             <div className="wmx-display" style={{ fontSize: 15, color: C.ink, lineHeight: 1.1 }}>WMX</div>
-            <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub }}>Portfolio Control</div>
+            <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub }}>Marketing Tracker</div>
           </div>
         </div>
 
