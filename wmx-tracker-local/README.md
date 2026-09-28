@@ -106,26 +106,27 @@ while production stayed frozen on whatever build last succeeded.
 
 ## Known limits (be aware of these before relying on it)
 
-- **Roles are UI-level, not database-enforced.** Admins (`aly`, `jeff`,
-  `jason`, `nick` @wmx.group — managed via the `public.app_admins` table)
-  get a `role: admin` tag stamped into their account on sign-up and can see
-  Accounts & Logins, delete tickets, and edit the Team tab's task statuses.
-  Everyone else has those hidden/disabled in the UI. This is real for a
-  small trusted team, but it isn't a hard security boundary — all app data
-  lives in one shared JSON blob (`tracker_state.data`) with a single
-  table-wide RLS policy requiring only `authenticated`, so there's no way to
-  enforce "only admins can write this JSON key" at the database layer
-  without splitting each tab into its own table with its own RLS policy
-  (the bigger schema rewrite noted below). Add a real DB-level admin allowlist
-  before this includes people you don't fully trust with all of it.
+- **Roles are mixed: real for Accounts & Logins, UI-level everywhere else.**
+  Admins (`aly`, `jeff`, `jason`, `nick` @wmx.group — managed via the
+  `public.app_admins` table) get a `role: admin` tag stamped into their
+  account automatically on sign-up. Accounts & Logins now lives in its own
+  `credential_accounts` table with an RLS policy that checks
+  `public.is_admin()` — a non-admin account literally cannot read or write
+  that table, not just a hidden tab. Deleting tickets and editing the Team
+  tab's task statuses are still UI-level only, since tickets/team live in
+  the shared `tracker_state.data` JSON blob with one table-wide policy —
+  give those their own tables too before this includes people you don't
+  fully trust with all of it.
 - **One shared row, not normalized tables.** Simplest possible model to get
   realtime + attribution working fast. If this grows past a small team, the
   fuller relational schema in `wmx-tracker-build-spec.md` (separate tables
   per tab, per-row history) is the next real step — it lets you show
   "who changed *this specific ticket*" instead of "who changed *something*."
-- **Passwords in Accounts & Logins are still plaintext** in the JSON blob,
-  same caveat as before. Don't put anything actually sensitive in there until
-  it's moved to an encrypted column with RLS scoped to authenticated users.
+- **Passwords in Accounts & Logins are still plaintext** in the
+  `credential_accounts` table — RLS now restricts who can query that table
+  to admins, but the values themselves aren't encrypted at rest. Don't put
+  anything highly sensitive in there until that's moved to an encrypted
+  column (e.g. via Supabase Vault).
 - **Ticket notifications only reach an open tab**, not a closed browser or a
   phone that doesn't have the app open — this is a realtime in-app/desktop
   notification, not true push notifications (which need a service worker,

@@ -81,7 +81,16 @@ end $$;
 -- The app's login is the only access gate now that the project's Vercel
 -- deployment protection is off, so new accounts must be restricted here,
 -- server-side — covers both email/password sign-up and Google OAuth, since
--- both create the account by inserting into auth.users.
+-- both create the account by inserting into auth.users. Emails in
+-- app_admins also get role: admin stamped into their account automatically.
+create table if not exists public.app_admins (
+  email text primary key
+);
+
+insert into public.app_admins (email) values
+  ('aly@wmx.group'), ('jeff@wmx.group'), ('jason@wmx.group'), ('nick@wmx.group')
+on conflict (email) do nothing;
+
 create or replace function public.enforce_wmx_email_domain()
 returns trigger
 language plpgsql
@@ -92,6 +101,9 @@ begin
   if new.email is not null and new.email !~* '@wmx\.group$' then
     raise exception 'Sign-up is restricted to @wmx.group accounts.';
   end if;
+  if exists (select 1 from public.app_admins a where lower(a.email) = lower(new.email)) then
+    new.raw_user_meta_data = coalesce(new.raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', 'admin');
+  end if;
   return new;
 end;
 $$;
@@ -100,3 +112,47 @@ drop trigger if exists enforce_wmx_email_domain on auth.users;
 create trigger enforce_wmx_email_domain
   before insert on auth.users
   for each row execute function public.enforce_wmx_email_domain();
+
+-- Accounts & Logins: its own table with real, database-level RLS
+-- restricting it to admins (not just a hidden tab in the UI).
+create table if not exists public.credential_accounts (
+  id text primary key,
+  biz text not null,
+  platform text not null,
+  username text not null default '',
+  password text not null default '',
+  notes text not null default '',
+  updated_by text,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.credential_accounts enable row level security;
+
+-- reads the caller's email straight off their JWT — no auth.users access
+-- needed, so no security definer required either.
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1 from public.app_admins a
+    where lower(a.email) = lower(auth.jwt() ->> 'email')
+  );
+$$;
+
+drop policy if exists "admins_all" on public.credential_accounts;
+create policy "admins_all" on public.credential_accounts
+  for all
+  using (public.is_admin())
+  with check (public.is_admin());
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'credential_accounts'
+  ) then
+    alter publication supabase_realtime add table credential_accounts;
+  end if;
+end $$;

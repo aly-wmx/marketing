@@ -164,13 +164,6 @@ const SAAS = [
   { id: "mysterypixel", tool: "Unverified \"pixel\" line item", cost: 200, biz: ["mn"], notes: "Confirm with Blue Collar before renewing" },
 ];
 
-const initAccounts = () => [
-  { id: "a1", biz: "wm", platform: "Instagram", username: "@watermark_tampa", password: "correcthorsebattery", notes: "" },
-  { id: "a2", biz: "mn", platform: "Google Business Profile", username: "manolo.roofing@gmail.com", password: "roofingpw2026", notes: "Video verification pending" },
-  { id: "a3", biz: "gh", platform: "GoHighLevel sub-account", username: "gh-admin", password: "gh-pw-2026", notes: "" },
-  { id: "a4", biz: "tf", platform: "TikTok", username: "@twofold.tampa", password: "twofoldpw", notes: "" },
-];
-
 const initTickets = () => [
   { id: "t1", biz: "gh", type: "issue", title: "Spotipo auth window reverted to 30 days?",
     details: "Double-check UniFi didn't reset the 8–12hr setting after firmware update.",
@@ -184,7 +177,6 @@ function seedState() {
     onboarding: initOnboarding(),
     team: initTeam(),
     kpis: seedKpis(),
-    accounts: initAccounts().map((a) => ({ ...a, show: false })),
     tickets: initTickets(),
   };
 }
@@ -457,18 +449,55 @@ function SaasTab({ saas }) {
   );
 }
 
-function AccountsTab({ accounts, setAccounts }) {
-  const toggle = (id) => setAccounts((prev) => prev.map((a) => a.id === id ? { ...a, show: !a.show } : a));
+// Its own table with admin-only RLS (public.credential_accounts, policy
+// checks public.is_admin()) — not part of the shared tracker_state blob, so
+// this is a real database-level restriction, not just a hidden tab.
+function AccountsTab() {
+  const [accounts, setAccounts] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [shown, setShown] = useState({}); // local-only reveal state, id -> bool
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: rows, error } = await supabase.from("credential_accounts").select("*").order("biz");
+        if (error) throw error;
+        if (!cancelled) setAccounts(rows || []);
+      } catch (e) {
+        console.warn("Could not load accounts:", e.message ?? e);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("credential_accounts_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "credential_accounts" }, (payload) => {
+        setAccounts((prev) => {
+          if (payload.eventType === "DELETE") return prev.filter((a) => a.id !== payload.old.id);
+          return [...prev.filter((a) => a.id !== payload.new.id), payload.new];
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const toggle = (id) => setShown((prev) => ({ ...prev, [id]: !prev[id] }));
+
   return (
     <>
-      <PageHeader eyebrow="Logins per business" title="Accounts & Logins" />
+      <PageHeader eyebrow="Logins per business · admins only" title="Accounts & Logins" />
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: C.brassSoft, border: `1px solid ${C.brass}40`, borderRadius: 8, padding: 14, marginBottom: 18 }}>
         <AlertTriangle size={16} color={C.brass} style={{ flexShrink: 0, marginTop: 2 }} />
         <span className="wmx-body" style={{ fontSize: 12.5, color: C.ink }}>
-          Convenience storage only — <b>not an encrypted vault</b>, and saved data here is <b>visible to anyone who opens this artifact</b>.
-          Keep anything financial elsewhere, and route this through Supabase Row Level Security + column-level encryption before production use.
+          Restricted at the database level to admins — not just hidden in the UI. Still <b>not an encrypted vault</b>; keep anything highly sensitive elsewhere.
         </span>
       </div>
+      {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading…</div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 16 }}>
         {BUSINESSES.map((b) => {
           const rows = accounts.filter((a) => a.biz === b.id);
@@ -483,14 +512,17 @@ function AccountsTab({ accounts, setAccounts }) {
                   <div className="wmx-body" style={{ fontSize: 12, color: C.sub }}>{a.platform}</div>
                   <div className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{a.username}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                    <span style={{ fontFamily: "monospace", fontSize: 13, color: C.ink }}>{a.show ? a.password : "••••••••"}</span>
+                    <span style={{ fontFamily: "monospace", fontSize: 13, color: C.ink }}>{shown[a.id] ? a.password : "••••••••"}</span>
                     <button onClick={() => toggle(a.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
-                      {a.show ? <EyeOff size={14} color={C.sub} /> : <Eye size={14} color={C.sub} />}
+                      {shown[a.id] ? <EyeOff size={14} color={C.sub} /> : <Eye size={14} color={C.sub} />}
                     </button>
                   </div>
                   {a.notes && <div className="wmx-body" style={{ fontSize: 11.5, color: C.warn, marginTop: 4 }}>{a.notes}</div>}
                 </div>
               ))}
+              {rows.length === 0 && loaded && (
+                <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub }}>No accounts logged for this business yet.</div>
+              )}
             </Card>
           );
         })}
@@ -1188,11 +1220,6 @@ export default function WMXTracker() {
     markDirty();
   }, [markDirty]);
 
-  // password show/hide is transient UI, not saved progress — doesn't mark dirty
-  const setAccounts = useCallback((updater) => {
-    setData((prev) => ({ ...prev, accounts: typeof updater === "function" ? updater(prev.accounts) : updater }));
-  }, []);
-
   const handleSave = async () => {
     setSaveState("saving");
     try {
@@ -1389,7 +1416,7 @@ export default function WMXTracker() {
           {tab === "kpis" && <KpiTab kpis={data.kpis} setKpis={setKpis} />}
           {tab === "social" && <SocialTab />}
           {tab === "saas" && <SaasTab saas={SAAS} />}
-          {tab === "accounts" && isAdmin && <AccountsTab accounts={data.accounts} setAccounts={setAccounts} />}
+          {tab === "accounts" && isAdmin && <AccountsTab />}
           {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} canDelete={isAdmin} />}
 
           <div className="wmx-body" style={{ marginTop: 28, paddingTop: 14, borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", fontSize: 11, color: C.sub, flexWrap: "wrap", gap: 6 }}>
