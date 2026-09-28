@@ -310,6 +310,24 @@ function FormField({ label, children, span }) {
   );
 }
 
+function LoadingState({ label = "Loading…" }) {
+  return (
+    <div className="wmx-body" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", marginBottom: 12, color: C.sub, fontSize: 12.5 }}>
+      <Loader2 size={13} className="wmx-spin" /> {label}
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, subtitle, compact }) {
+  return (
+    <div style={{ textAlign: "center", padding: compact ? "18px 0" : "32px 16px", border: `1px dashed ${C.line}`, borderRadius: 10 }}>
+      {Icon && <Icon size={22} color={C.line} style={{ marginBottom: 8 }} />}
+      <div className="wmx-body" style={{ fontSize: compact ? 12 : 13, fontWeight: 600, color: C.ink }}>{title}</div>
+      {subtitle && <div className="wmx-body" style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>{subtitle}</div>}
+    </div>
+  );
+}
+
 function PageHeader({ eyebrow, title, right }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 22, flexWrap: "wrap", gap: 10 }}>
@@ -655,7 +673,7 @@ function AccountsTab() {
           Restricted at the database level to admins — not just hidden in the UI. Still <b>not an encrypted vault</b>; keep anything highly sensitive elsewhere.
         </span>
       </div>
-      {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading…</div>}
+      {!loaded && <LoadingState />}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 16 }}>
         {BUSINESSES.map((b) => {
           const rows = accounts.filter((a) => a.biz === b.id);
@@ -957,7 +975,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
                       onStatus={setStatus} onRemove={remove} onAddComment={addComment} onReassign={reassign} />
                   );
                 })}
-                {items.length === 0 && <div className="wmx-body" style={{ fontSize: 12, color: C.sub, textAlign: "center", padding: "18px 0", border: `1px dashed ${C.line}`, borderRadius: 8 }}>Empty — drop a ticket here</div>}
+                {items.length === 0 && <EmptyState title="Empty" subtitle="Drop a ticket here" compact />}
               </div>
             </div>
           );
@@ -1134,11 +1152,9 @@ function SocialTab({ logActivity }) {
           </Card>
         </div>
       } />
-      {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading social stats…</div>}
+      {!loaded && <LoadingState label="Loading social stats…" />}
       {loaded && brands.length === 0 && (
-        <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub }}>
-          No brands/platforms found in Supabase yet — nothing to show here.
-        </div>
+        <EmptyState icon={Share2} title="Nothing set up yet" subtitle="No brands/platforms found in Supabase yet." />
       )}
 
       {loaded && brands.length > 0 && (() => {
@@ -1282,9 +1298,9 @@ function ActivityTab() {
   return (
     <>
       <PageHeader eyebrow="Who did what, across the whole app" title="Activity" />
-      {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading…</div>}
+      {!loaded && <LoadingState />}
       {loaded && entries.length === 0 && (
-        <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub }}>Nothing logged yet — actions across the app will show up here live.</div>
+        <EmptyState icon={ActivityIcon} title="No activity yet" subtitle="Actions across the app will show up here live." />
       )}
       <Card style={{ padding: 4 }}>
         {entries.map((e, i) => {
@@ -1417,10 +1433,10 @@ function AdminTab({ userEmail, logActivity }) {
       </Card>
 
       <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>All accounts</div>
-      {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub }}>Loading…</div>}
+      {!loaded && <LoadingState />}
       <Card style={{ padding: 4 }}>
         {loaded && accounts.length === 0 && (
-          <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, padding: 14 }}>No accounts yet.</div>
+          <EmptyState icon={Users} title="No accounts yet" compact />
         )}
         {accounts.map((a, i) => (
           <div key={a.email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.line}`, flexWrap: "wrap", gap: 8 }}>
@@ -2043,9 +2059,7 @@ export default function WMXTracker() {
 
       <main className="wmx-main">
         <div style={{ maxWidth: 1000 }}>
-          {!loaded && (
-            <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading saved progress…</div>
-          )}
+          {!loaded && <LoadingState label="Loading saved progress…" />}
           {remoteBanner && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: C.brassSoft, border: `1px solid ${C.brass}40`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, flexWrap: "wrap" }}>
               <span className="wmx-body" style={{ fontSize: 12.5, color: C.ink }}>
