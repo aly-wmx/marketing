@@ -3,7 +3,7 @@ import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
   ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
-  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download, ShieldCheck, LayoutDashboard,
+  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download, ShieldCheck, LayoutDashboard, Menu,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import wmxCrest from "./assets/wmx-crest.png";
@@ -53,12 +53,21 @@ const FONTS = `
 .wmx-saas-cols{grid-template-columns:2fr 0.8fr 1.6fr 2fr 32px;}
 .wmx-kpi-cols{grid-template-columns:2fr 0.9fr 0.9fr 0.9fr 1fr 1.4fr;}
 .wmx-social-cols{grid-template-columns:1.3fr 1fr 0.9fr 0.7fr 0.9fr 0.7fr;}
+.wmx-mobile-topbar{display:none;}
+.wmx-mobile-backdrop{display:none;}
 @media (max-width: 860px){
   .wmx-shell{flex-direction:column;}
-  .wmx-sidebar{width:100%;}
-  .wmx-nav{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px;}
-  .wmx-nav-group{display:contents;}
-  .wmx-nav-group-label{display:none;}
+  .wmx-mobile-topbar{display:flex;align-items:center;gap:10px;padding:12px 16px;background:${C.sidebar};border-bottom:1px solid ${C.line};position:sticky;top:0;z-index:80;}
+  .wmx-sidebar{
+    position:fixed;top:0;left:0;width:280px;max-width:82vw;height:100vh;z-index:100;
+    overflow-y:auto;box-shadow:2px 0 16px rgba(20,18,12,0.18);
+    transform:translateX(-100%);transition:transform .22s ease;
+  }
+  .wmx-sidebar.wmx-sidebar-open{transform:translateX(0);}
+  .wmx-nav{flex-direction:column;overflow-x:visible;gap:2px;padding-bottom:0;}
+  .wmx-nav-group{display:flex;flex-direction:column;gap:2px;}
+  .wmx-nav-group-label{display:block;}
+  .wmx-mobile-backdrop{display:block;position:fixed;inset:0;background:rgba(20,18,12,0.45);z-index:90;}
   .wmx-main{padding:18px 16px;}
   .wmx-ticket-board{grid-template-columns:1fr;}
 }
@@ -2021,6 +2030,7 @@ function OnboardingTour({ onDismiss }) {
 export default function WMXTracker() {
   const [tab, setTab] = useState("overview");
   const [showTicketForm, setShowTicketForm] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [data, setData] = useState(seedState);
   const [loaded, setLoaded] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -2293,7 +2303,18 @@ export default function WMXTracker() {
     <div className="wmx-body wmx-shell" style={{ minHeight: "100%", background: C.bg }}>
       <style>{FONTS}</style>
 
-      <aside className="wmx-sidebar" style={{ background: C.sidebar, borderRight: `1px solid ${C.line}`, padding: "22px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="wmx-mobile-topbar">
+        <button onClick={() => setMobileNavOpen(true)} aria-label="Open menu" className="wmx-focus wmx-icon-btn"
+          style={{ border: "none", cursor: "pointer", padding: 6, display: "flex" }}>
+          <Menu size={20} color={C.ink} />
+        </button>
+        <img src={wmxCrest} alt="" style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0 }} />
+        <span className="wmx-display" style={{ fontSize: 14, color: C.ink }}>WMX Marketing Tracker</span>
+      </div>
+
+      {mobileNavOpen && <div className="wmx-mobile-backdrop" onClick={() => setMobileNavOpen(false)} />}
+
+      <aside className={`wmx-sidebar${mobileNavOpen ? " wmx-sidebar-open" : ""}`} style={{ background: C.sidebar, borderRight: `1px solid ${C.line}`, padding: "22px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 6px" }}>
           <img src={wmxCrest} alt="" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
           <div>
@@ -2302,7 +2323,7 @@ export default function WMXTracker() {
           </div>
         </div>
 
-        <button onClick={() => { setTab("tickets"); setShowTicketForm(true); }} className="wmx-body wmx-focus"
+        <button onClick={() => { setTab("tickets"); setShowTicketForm(true); setMobileNavOpen(false); }} className="wmx-body wmx-focus"
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.ink, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, padding: "10px 12px", fontWeight: 600 }}>
           <Plus size={15} /> New Ticket
         </button>
@@ -2322,7 +2343,7 @@ export default function WMXTracker() {
             {isAdmin && <Pill color={C.brass} bg={C.brassSoft}>Admin</Pill>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button onClick={() => { setTab("tickets"); setUnreadCount(0); }} className="wmx-focus wmx-icon-btn" title="Tickets assigned to you" aria-label={`Tickets assigned to you${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
+            <button onClick={() => { setTab("tickets"); setUnreadCount(0); setMobileNavOpen(false); }} className="wmx-focus wmx-icon-btn" title="Tickets assigned to you" aria-label={`Tickets assigned to you${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
               style={{ position: "relative", border: "none", cursor: "pointer", padding: 2, display: "flex" }}>
               <Bell size={15} color={unreadCount > 0 ? C.brass : C.sub} />
               {unreadCount > 0 && (
@@ -2378,7 +2399,7 @@ export default function WMXTracker() {
                 const active = tab === t.id;
                 const badge = t.id === "tickets" && openTicketCount > 0 ? openTicketCount : null;
                 return (
-                  <button key={t.id} onClick={() => setTab(t.id)} className="wmx-focus wmx-nav-btn"
+                  <button key={t.id} onClick={() => { setTab(t.id); setMobileNavOpen(false); }} className="wmx-focus wmx-nav-btn"
                     style={{
                       display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8,
                       border: "none", cursor: "pointer", textAlign: "left",
