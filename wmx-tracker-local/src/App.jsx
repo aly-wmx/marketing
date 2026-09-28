@@ -3,7 +3,7 @@ import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
   ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
-  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon,
+  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -56,6 +56,23 @@ const weightedPct = (items) => Math.round((items.reduce((sum, i) => sum + STATUS
 const PRIORITY_LABEL = { low: "Low", medium: "Medium", high: "High" };
 const PRIORITY_COLOR = { low: C.good, medium: C.brass, high: C.warn };
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+
+const csvEscape = (v) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const toCsv = (headers, rows) => [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+const downloadCsv = (filename, csv) => {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
 /* -------------------------------- seed data -------------------------------- */
 const BUSINESSES = [
@@ -375,9 +392,23 @@ function KpiTab({ kpis, setKpis }) {
   const update = (id, field, val) => setKpis((prev) => prev.map((k) => k.id === id ? { ...k, [field]: val } : k));
   const metricCount = KPI_METRICS_BY_CATEGORY.reduce((sum, [, metrics]) => sum + metrics.length, 0);
 
+  const exportCsv = () => {
+    const headers = ["Business", "Category", "Metric", "Current", "Target", "Cadence", "Notes"];
+    const rows = kpis.map((k) => {
+      const cat = KPI_CATEGORIES.find((c) => c.id === k.categoryId);
+      return [KPI_TAB_NAME[k.biz] || k.biz, cat?.name || k.categoryId, k.metric, k.current, k.target, k.cadence, k.notes];
+    });
+    downloadCsv(`wmx-kpis-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(headers, rows));
+  };
+
   return (
     <>
-      <PageHeader eyebrow={`${metricCount} metrics · ${KPI_CATEGORIES.length} categories · tracked per business`} title="KPIs" />
+      <PageHeader eyebrow={`${metricCount} metrics · ${KPI_CATEGORIES.length} categories · tracked per business`} title="KPIs" right={
+        <button onClick={exportCsv} className="wmx-body wmx-focus"
+          style={{ display: "flex", alignItems: "center", gap: 6, background: "none", color: C.ink, border: `1px solid ${C.line}`, borderRadius: 8, cursor: "pointer", fontSize: 12.5, padding: "8px 14px", fontWeight: 600 }}>
+          <Download size={14} /> Export CSV
+        </button>
+      } />
 
       <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
         {BUSINESSES.map((b) => (
@@ -915,13 +946,36 @@ function SocialTab({ logActivity }) {
     }
   }, [brands, platforms, logActivity]);
 
+  const exportCsv = () => {
+    const headers = ["Business", "Platform", "Followers", "As of", "Change vs previous"];
+    const rows = [];
+    BUSINESSES.forEach((b) => {
+      const brandRow = brands.find((row) => row.slug === BRAND_SLUG_BY_BIZ[b.id]);
+      if (!brandRow) return;
+      platforms.forEach((p) => {
+        const history = historyByKey[`${brandRow.id}:${p.id}`] || [];
+        const latest = history[0];
+        if (!latest) return;
+        const delta = history[1] ? latest.followers - history[1].followers : "";
+        rows.push([b.name, p.name, latest.followers, latest.week_ending, delta]);
+      });
+    });
+    downloadCsv(`wmx-social-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(headers, rows));
+  };
+
   return (
     <>
       <PageHeader eyebrow="Weekly tracking · manual for now, ready for API sync later" title="Social Media Hub" right={
-        <Card style={{ padding: "10px 18px" }}>
-          <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6 }}>Total followers</div>
-          <div className="wmx-display" style={{ fontSize: 22, color: C.brass }}>{totalFollowers.toLocaleString()}</div>
-        </Card>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={exportCsv} className="wmx-body wmx-focus"
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "none", color: C.ink, border: `1px solid ${C.line}`, borderRadius: 8, cursor: "pointer", fontSize: 12.5, padding: "8px 14px", fontWeight: 600 }}>
+            <Download size={14} /> Export CSV
+          </button>
+          <Card style={{ padding: "10px 18px" }}>
+            <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6 }}>Total followers</div>
+            <div className="wmx-display" style={{ fontSize: 22, color: C.brass }}>{totalFollowers.toLocaleString()}</div>
+          </Card>
+        </div>
       } />
       {!loaded && <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading social stats…</div>}
       {loaded && brands.length === 0 && (

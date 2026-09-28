@@ -9,6 +9,7 @@ A real, running copy of the WMX tracker with:
 - **Real login** — Supabase Auth gates the app: Google OAuth or an email/password account, not just a name label. Every table's RLS policy requires an authenticated session, so the data is actually protected, not just hidden behind a UI screen.
 - **Tickets with priority, due dates, and comments** — filterable by business/priority/title, sorted by priority then due date within each column.
 - **Activity feed** — a live log of discrete actions (status changes, ticket moves, comments, follower counts logged) across the whole app, not just a single "last edited by" line.
+- **CSV export** — an "Export CSV" button on the KPIs and Social Media Hub tabs downloads the current data (all businesses) for a leadership update, no screenshotting required.
 
 ## 1. Create a Supabase project (free tier is fine)
 
