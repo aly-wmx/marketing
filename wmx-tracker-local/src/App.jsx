@@ -560,6 +560,7 @@ function OverviewTab({ data, portfolioPct, openTicketCount, setTab }) {
 }
 
 function SetupProgress({ onboarding, setOnboarding, logActivity, assignableNames, userName, setTickets, onTicketAssigned, setTab }) {
+  const [activeBiz, setActiveBiz] = useState(BUSINESSES[0].id);
   const pushToTicket = (bizId, item, assignee) => {
     const ticket = {
       id: `t${Date.now()}`, biz: bizId, type: "request", title: item.label,
@@ -573,40 +574,57 @@ function SetupProgress({ onboarding, setOnboarding, logActivity, assignableNames
     setOnboarding((prev) => ({ ...prev, [bizId]: prev[bizId].map((it) => it.id === item.id ? { ...it, ticketId: ticket.id, assignee } : it) }));
   };
 
+  const b = bizById(activeBiz);
+  const items = onboarding[activeBiz];
+  const done = items.filter((i) => i.status === "done").length;
+  const pct = weightedPct(items);
+
   return (
     <>
       <PageHeader eyebrow="Onboarding · any item can be pushed to Tickets and assigned" title="Setup Progress" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px,1fr))", gap: 16 }}>
-        {BUSINESSES.map((b) => {
-          const items = onboarding[b.id];
-          const done = items.filter((i) => i.status === "done").length;
-          const pct = weightedPct(items);
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
+        {BUSINESSES.map((biz) => {
+          const bizPct = weightedPct(onboarding[biz.id]);
+          const active = activeBiz === biz.id;
           return (
-            <Card key={b.id} style={{ padding: 18 }}>
-              <div style={{ height: 4, borderRadius: 4, background: b.color, marginBottom: 14, marginTop: -4, marginLeft: -4, marginRight: -4 }} />
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                <div>
-                  <div className="wmx-display" style={{ fontSize: 16, color: C.ink }}>{b.name}</div>
-                  <Pill color={b.color} bg={b.soft}>{b.model}</Pill>
-                </div>
-                <Ring pct={pct} size={56} color={b.color} />
-              </div>
-              <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub, margin: "12px 0 4px" }}>{done}/{items.length} tasks complete</div>
-              <div>{items.map((item) => (
-                <SetupItemRow key={item.id} item={item} assignableNames={assignableNames}
-                  onToggleStatus={() => {
-                    const next = nextStatus(item.status);
-                    setOnboarding((prev) => ({ ...prev, [b.id]: prev[b.id].map((it) => it.id === item.id ? { ...it, status: next } : it) }));
-                    logActivity("update", `marked "${item.label}" ${STATUS_LABEL[next].toLowerCase()}`, b.id);
-                  }}
-                  onAssign={(name) => pushToTicket(b.id, item, name)}
-                  onGoToTicket={() => setTab("tickets")}
-                />
-              ))}</div>
-            </Card>
+            <button key={biz.id} onClick={() => setActiveBiz(biz.id)} className="wmx-body wmx-focus"
+              style={{
+                display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, padding: "8px 14px", borderRadius: 8,
+                border: `1px solid ${active ? biz.color : C.line}`,
+                background: active ? biz.color : "transparent",
+                color: active ? "#fff" : C.ink,
+                cursor: "pointer",
+              }}>
+              {biz.name}
+              <span style={{ fontSize: 11, fontWeight: 700, color: active ? "#fff" : C.sub }}>{bizPct}%</span>
+            </button>
           );
         })}
       </div>
+
+      <Card style={{ padding: 18, maxWidth: 560 }}>
+        <div style={{ height: 4, borderRadius: 4, background: b.color, marginBottom: 14, marginTop: -4, marginLeft: -4, marginRight: -4 }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div>
+            <div className="wmx-display" style={{ fontSize: 16, color: C.ink }}>{b.name}</div>
+            <Pill color={b.color} bg={b.soft}>{b.model}</Pill>
+          </div>
+          <Ring pct={pct} size={56} color={b.color} />
+        </div>
+        <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub, margin: "12px 0 4px" }}>{done}/{items.length} tasks complete</div>
+        <div>{items.map((item) => (
+          <SetupItemRow key={item.id} item={item} assignableNames={assignableNames}
+            onToggleStatus={() => {
+              const next = nextStatus(item.status);
+              setOnboarding((prev) => ({ ...prev, [activeBiz]: prev[activeBiz].map((it) => it.id === item.id ? { ...it, status: next } : it) }));
+              logActivity("update", `marked "${item.label}" ${STATUS_LABEL[next].toLowerCase()}`, activeBiz);
+            }}
+            onAssign={(name) => pushToTicket(activeBiz, item, name)}
+            onGoToTicket={() => setTab("tickets")}
+          />
+        ))}</div>
+      </Card>
     </>
   );
 }
