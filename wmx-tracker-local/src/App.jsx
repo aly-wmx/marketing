@@ -32,6 +32,18 @@ const FONTS = `
 .wmx-focus:focus-visible{outline:2px solid ${C.brass};outline-offset:2px;}
 .wmx-spin{animation:wmx-spin .8s linear infinite;}
 @keyframes wmx-spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+.wmx-shell{display:flex;}
+.wmx-sidebar{width:250px;flex-shrink:0;}
+.wmx-nav{display:flex;flex-direction:column;gap:2px;}
+.wmx-main{flex:1;padding:28px 32px;min-width:0;}
+.wmx-ticket-board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+@media (max-width: 860px){
+  .wmx-shell{flex-direction:column;}
+  .wmx-sidebar{width:100%;}
+  .wmx-nav{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px;}
+  .wmx-main{padding:18px 16px;}
+  .wmx-ticket-board{grid-template-columns:1fr;}
+}
 `;
 
 const STORAGE_KEY = "wmx-tracker-state";
@@ -719,7 +731,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
         </select>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+      <div className="wmx-ticket-board">
         {columns.map((col) => {
           const items = sortColumn(filtered.filter((t) => t.status === col.id));
           return (
@@ -1500,10 +1512,10 @@ export default function WMXTracker() {
   }
 
   return (
-    <div className="wmx-body" style={{ minHeight: "100%", background: C.bg, display: "flex" }}>
+    <div className="wmx-body wmx-shell" style={{ minHeight: "100%", background: C.bg }}>
       <style>{FONTS}</style>
 
-      <aside style={{ width: 250, flexShrink: 0, background: C.sidebar, borderRight: `1px solid ${C.line}`, padding: "22px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <aside className="wmx-sidebar" style={{ background: C.sidebar, borderRight: `1px solid ${C.line}`, padding: "22px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 6px" }}>
           <div style={{ width: 34, height: 34, borderRadius: 8, background: C.ink, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }} className="wmx-display">W</div>
           <div>
@@ -1574,7 +1586,7 @@ export default function WMXTracker() {
           </div>
         )}
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <nav className="wmx-nav">
           {TABS.filter((t) => t.id !== "accounts" || isAdmin).map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
@@ -1610,7 +1622,7 @@ export default function WMXTracker() {
         </div>
       </aside>
 
-      <main style={{ flex: 1, padding: "28px 32px", minWidth: 0 }}>
+      <main className="wmx-main">
         <div style={{ maxWidth: 1000 }}>
           {!loaded && (
             <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>Loading saved progress…</div>
@@ -1647,9 +1659,9 @@ export default function WMXTracker() {
         </div>
       </main>
 
-      <div style={{ position: "fixed", top: 18, right: 18, display: "flex", flexDirection: "column", gap: 8, zIndex: 50, maxWidth: 320 }}>
+      <div style={{ position: "fixed", top: 18, right: 18, left: 18, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, zIndex: 50 }}>
         {toasts.map((n) => (
-          <Card key={n.id} style={{ padding: "12px 14px", boxShadow: "0 6px 18px rgba(20,20,15,0.14)", borderLeft: `3px solid ${C.brass}` }}>
+          <Card key={n.id} style={{ padding: "12px 14px", boxShadow: "0 6px 18px rgba(20,20,15,0.14)", borderLeft: `3px solid ${C.brass}`, maxWidth: 320, width: "100%" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
               <div>
                 <div className="wmx-body" style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>{n.created_by} assigned you a ticket</div>
