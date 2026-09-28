@@ -37,12 +37,14 @@ npm run dev
 ```
 
 Open `http://localhost:5173`. First thing you'll see: a real sign-in screen —
-"Continue with Google" or an email/password account. After signing in for the
-first time you'll be asked what to call you ("Aly", "Brad", etc.) — that label
-gets attached to your saves so teammates know who changed what, and follows
-your account across devices (it's stored in Supabase Auth's user metadata,
-not localStorage). Click the pencil icon next to your name in the sidebar to
-change it later, or the sign-out icon to switch accounts.
+"Continue with Google" or an email/password account (sign-up is restricted to
+`@wmx.group` addresses, enforced server-side). Your display name comes
+straight from the account — your Google profile name, or the name you give
+at sign-up — no separate "who's this" step to get through first. It follows
+your account across devices (stored in Supabase Auth's user metadata, not
+localStorage). Click the pencil icon next to your name in the sidebar to
+change it later, or the sign-out icon to switch accounts. The first time any
+account signs in, a short one-time welcome tour walks through the tabs.
 
 ### Enabling Google sign-in (one-time setup, do this in the dashboards)
 
@@ -104,11 +106,13 @@ while production stayed frozen on whatever build last succeeded.
 
 ## Known limits (be aware of these before relying on it)
 
-- **Anyone with an account gets full access.** Signing in (Google or
-  email/password) is real — RLS requires `authenticated` on every table —
-  but there's no role/permission tiering yet. Any signed-in account can read
-  and write everything. Fine for a small trusted team; add role-based access
-  before this includes people you don't fully trust with all of it.
+- **Anyone with a `@wmx.group` account gets full access.** Sign-up is
+  restricted to that domain (a Postgres trigger on `auth.users`, so it can't
+  be bypassed client-side), and RLS requires `authenticated` on every table —
+  but there's no role/permission tiering beyond that yet. Any signed-in
+  `@wmx.group` account can read and write everything, including client
+  passwords in Accounts & Logins. Add role-based access before this includes
+  people you don't fully trust with all of it.
 - **One shared row, not normalized tables.** Simplest possible model to get
   realtime + attribution working fast. If this grows past a small team, the
   fuller relational schema in `wmx-tracker-build-spec.md` (separate tables

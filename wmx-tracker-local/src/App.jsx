@@ -816,6 +816,19 @@ function LoginScreen() {
   const [notice, setNotice] = useState(null);
   const [googleBusy, setGoogleBusy] = useState(false);
 
+  // Google redirects failures back as #error_description=... in the URL
+  // rather than throwing client-side (e.g. an account outside @wmx.group
+  // rejected by the sign-up trigger) — surface it instead of silently
+  // bouncing back to a blank login screen.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const desc = params.get("error_description");
+    if (desc) {
+      setError(desc);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
+
   const withGoogle = async () => {
     setGoogleBusy(true);
     setError(null);
@@ -839,6 +852,11 @@ function LoginScreen() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    if (mode === "signup" && !/@wmx\.group$/i.test(email.trim())) {
+      setError("Sign-up is restricted to @wmx.group accounts.");
+      setBusy(false);
+      return;
+    }
     try {
       // Call directly on supabase.auth (not destructured into a variable) —
       // these are class methods that rely on `this`, and destructuring them

@@ -77,3 +77,26 @@ begin
     alter publication supabase_realtime add table ticket_notifications;
   end if;
 end $$;
+
+-- The app's login is the only access gate now that the project's Vercel
+-- deployment protection is off, so new accounts must be restricted here,
+-- server-side — covers both email/password sign-up and Google OAuth, since
+-- both create the account by inserting into auth.users.
+create or replace function public.enforce_wmx_email_domain()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.email is not null and new.email !~* '@wmx\.group$' then
+    raise exception 'Sign-up is restricted to @wmx.group accounts.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_wmx_email_domain on auth.users;
+create trigger enforce_wmx_email_domain
+  before insert on auth.users
+  for each row execute function public.enforce_wmx_email_domain();
