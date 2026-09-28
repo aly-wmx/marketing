@@ -268,8 +268,17 @@ function StatusRow({ label, status, onClick, disabled }) {
   );
 }
 
-function Card({ children, style }) {
-  return <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, boxShadow: "0 1px 2px rgba(20,20,15,0.04)", ...style }}>{children}</div>;
+function Card({ children, style, ...rest }) {
+  return <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, boxShadow: "0 1px 2px rgba(20,20,15,0.04)", ...style }} {...rest}>{children}</div>;
+}
+
+function FormField({ label, children, span }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: span ? `span ${span}` : undefined }}>
+      <span className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>{label}</span>
+      {children}
+    </div>
+  );
 }
 
 function PageHeader({ eyebrow, title, right }) {
@@ -583,7 +592,7 @@ function AccountsTab() {
   );
 }
 
-function TicketCard({ t, col, nextCol, canDelete, userName, onStatus, onRemove, onAddComment }) {
+function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, onStatus, onRemove, onAddComment, onReassign, dragging, onDragStart, onDragEnd }) {
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState("");
   const b = bizById(t.biz);
@@ -598,12 +607,18 @@ function TicketCard({ t, col, nextCol, canDelete, userName, onStatus, onRemove, 
   };
 
   return (
-    <Card style={{ padding: 14, borderTop: `3px solid ${col.accent}` }}>
-      <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+    <Card draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", t.id); onDragStart?.(t.id); }} onDragEnd={onDragEnd}
+      style={{ padding: 14, borderTop: `3px solid ${col.accent}`, cursor: "grab", opacity: dragging ? 0.4 : 1 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}>
         <Pill color={b.color} bg={b.soft}>{b.name}</Pill>
         <Pill color={C.sub} bg={C.bg}>{t.type}</Pill>
         <Pill color={PRIORITY_COLOR[t.priority] || C.brass} bg={C.bg}>{PRIORITY_LABEL[t.priority] || "Medium"}</Pill>
-        {t.assignee && <Pill color={C.brass} bg={C.brassSoft}>→ {t.assignee}</Pill>}
+        <select value={t.assignee || ""} onChange={(e) => onReassign(t.id, e.target.value)} draggable={false}
+          className="wmx-body wmx-focus"
+          style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 999, border: `1px solid ${t.assignee ? C.brass : C.line}`, background: t.assignee ? C.brassSoft : "transparent", color: t.assignee ? C.brass : C.sub, cursor: "pointer" }}>
+          <option value="">Unassigned</option>
+          {assignableNames.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
       </div>
       <div className="wmx-display" style={{ fontSize: 14, color: C.ink }}>{t.title}</div>
       {t.details && <div className="wmx-body" style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>{t.details}</div>}
@@ -630,7 +645,7 @@ function TicketCard({ t, col, nextCol, canDelete, userName, onStatus, onRemove, 
             </div>
           ))}
           <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-            <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submitComment()}
+            <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submitComment()} draggable={false}
               placeholder="Add a comment…" className="wmx-body wmx-focus" style={{ flex: 1, padding: 6, border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12 }} />
             <button onClick={submitComment} className="wmx-body wmx-focus"
               style={{ fontSize: 11, background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}>
@@ -668,6 +683,8 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   const [filterBiz, setFilterBiz] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [search, setSearch] = useState("");
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
 
   const addTicket = () => {
     if (!form.title.trim()) return;
@@ -680,6 +697,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   };
   const setStatus = (id, status) => {
     const ticket = tickets.find((t) => t.id === id);
+    if (!ticket || ticket.status === status) return;
     setTickets((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
     logActivity("update", `moved "${ticket.title}" to ${status.replace("_", " ")}`, ticket.biz);
   };
@@ -687,6 +705,17 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     const ticket = tickets.find((t) => t.id === id);
     setTickets((prev) => prev.filter((t) => t.id !== id));
     logActivity("delete", `deleted ticket "${ticket.title}"`, ticket.biz);
+  };
+  const reassign = (id, assignee) => {
+    const ticket = tickets.find((t) => t.id === id);
+    if (!ticket || ticket.assignee === assignee) return;
+    setTickets((prev) => prev.map((t) => t.id === id ? { ...t, assignee } : t));
+    if (assignee) {
+      onTicketAssigned({ ...ticket, assignee });
+      logActivity("assign", `assigned "${ticket.title}" to ${assignee}`, ticket.biz);
+    } else {
+      logActivity("update", `unassigned "${ticket.title}"`, ticket.biz);
+    }
   };
   const addComment = (id, text, by) => {
     const ticket = tickets.find((t) => t.id === id);
@@ -725,28 +754,58 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
       } />
 
       {showForm && (
-        <Card style={{ padding: 16, marginBottom: 18 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8 }}>
-            <select value={form.biz} onChange={(e) => setForm({ ...form, biz: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
-              {BUSINESSES.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
-              {["question", "idea", "request", "issue"].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
-            </select>
-            <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
-              {["high", "medium", "low"].map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
-            </select>
-            <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
-            <input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6, gridColumn: "span 2" }} />
-            <input placeholder="Your name" value={form.submitter} onChange={(e) => setForm({ ...form, submitter: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
-            <select value={form.assignee} onChange={(e) => setForm({ ...form, assignee: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
-              <option value="">Assign to…</option>
-              {assignableNames.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <input placeholder="Details" value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6, gridColumn: "span 3" }} />
-          </div>
-          <button onClick={addTicket} className="wmx-body wmx-focus" style={{ marginTop: 10, background: C.ink, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, padding: "8px 14px", fontWeight: 600 }}>Submit</button>
-        </Card>
+        <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}
+          onClick={() => setShowForm(false)}>
+          <Card style={{ padding: 24, maxWidth: 480, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div className="wmx-display" style={{ fontSize: 17, color: C.ink, marginBottom: 16 }}>New ticket</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <FormField label="Business">
+                <select value={form.biz} onChange={(e) => setForm({ ...form, biz: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  {BUSINESSES.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Type">
+                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  {["question", "idea", "request", "issue"].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Priority">
+                <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  {["high", "medium", "low"].map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Deadline">
+                <input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+              </FormField>
+              <FormField label="Title" span={2}>
+                <input placeholder="What's this about?" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+              </FormField>
+              <FormField label="Assign to">
+                <select value={form.assignee} onChange={(e) => setForm({ ...form, assignee: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  <option value="">Unassigned</option>
+                  {assignableNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Your name">
+                <input placeholder="Submitted by" value={form.submitter} onChange={(e) => setForm({ ...form, submitter: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+              </FormField>
+              <FormField label="Details" span={2}>
+                <textarea placeholder="Any extra context" value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} rows={3}
+                  className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6, resize: "vertical", fontFamily: "inherit" }} />
+              </FormField>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+              <button onClick={addTicket} disabled={!form.title.trim()} className="wmx-body wmx-focus"
+                style={{ background: form.title.trim() ? C.ink : C.line, color: form.title.trim() ? "#fff" : C.sub, border: "none", borderRadius: 6, cursor: form.title.trim() ? "pointer" : "default", fontSize: 13, padding: "9px 16px", fontWeight: 600 }}>
+                Create ticket
+              </button>
+              <button onClick={() => setShowForm(false)} className="wmx-body wmx-focus"
+                style={{ background: "none", border: `1px solid ${C.line}`, borderRadius: 6, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600, color: C.ink }}>
+                Cancel
+              </button>
+            </div>
+          </Card>
+        </div>
       )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
@@ -771,15 +830,25 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
                 <span className="wmx-display" style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: 0.6, color: col.accent }}>{col.label}</span>
                 <span className="wmx-body" style={{ fontSize: 11, color: C.sub, background: C.line, borderRadius: 999, padding: "1px 7px" }}>{items.length}</span>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 40 }}>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.id); }}
+                onDragLeave={() => setDragOverCol((c) => (c === col.id ? null : c))}
+                onDrop={(e) => { e.preventDefault(); setDragOverCol(null); setStatus(e.dataTransfer.getData("text/plain"), col.id); }}
+                style={{
+                  display: "flex", flexDirection: "column", gap: 10, minHeight: 60, borderRadius: 8, padding: 4, margin: -4,
+                  outline: dragOverCol === col.id ? `2px dashed ${col.accent}` : "2px dashed transparent", outlineOffset: -2,
+                  transition: "outline-color .1s",
+                }}>
                 {items.map((t) => {
                   const nextCol = col.id === "open" ? "in_progress" : col.id === "in_progress" ? "resolved" : null;
                   return (
-                    <TicketCard key={t.id} t={t} col={col} nextCol={nextCol} canDelete={canDelete} userName={userName}
-                      onStatus={setStatus} onRemove={remove} onAddComment={addComment} />
+                    <TicketCard key={t.id} t={t} col={col} nextCol={nextCol} canDelete={canDelete} userName={userName} assignableNames={assignableNames}
+                      dragging={draggingId === t.id}
+                      onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)}
+                      onStatus={setStatus} onRemove={remove} onAddComment={addComment} onReassign={reassign} />
                   );
                 })}
-                {items.length === 0 && <div className="wmx-body" style={{ fontSize: 12, color: C.sub, textAlign: "center", padding: "18px 0", border: `1px dashed ${C.line}`, borderRadius: 8 }}>Empty</div>}
+                {items.length === 0 && <div className="wmx-body" style={{ fontSize: 12, color: C.sub, textAlign: "center", padding: "18px 0", border: `1px dashed ${C.line}`, borderRadius: 8 }}>Empty — drop a ticket here</div>}
               </div>
             </div>
           );

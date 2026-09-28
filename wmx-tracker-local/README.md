@@ -7,7 +7,7 @@ A real, running copy of the WMX tracker with:
 - **Ticket assignment notifications** — assign a new ticket to a teammate and they get a live in-app banner (plus a desktop notification if their tab is in the background and they've allowed it)
 - **Social Media Hub** — a tab for tracking follower counts per brand/platform, backed by the `brands`/`platforms`/`weekly_snapshots` tables already provisioned in Supabase (manual entry for now, week-over-week deltas, a trend sparkline per platform, ready for an automated API sync later)
 - **Real login** — Supabase Auth gates the app: Google OAuth or an email/password account, not just a name label. Every table's RLS policy requires an authenticated session, so the data is actually protected, not just hidden behind a UI screen.
-- **Tickets with priority, due dates, and comments** — filterable by business/priority/title, sorted by priority then due date within each column.
+- **Tickets with priority, due dates, and comments** — filterable by business/priority/title, sorted by priority then due date within each column. New tickets open in a labeled popup form; cards are drag-and-droppable directly between Open/In Progress/Resolved; reassigning a ticket (from the card itself, not just at creation) automatically notifies the new assignee.
 - **Activity feed** — a live log of discrete actions (status changes, ticket moves, comments, follower counts logged) across the whole app, not just a single "last edited by" line.
 - **CSV export** — an "Export CSV" button on the KPIs and Social Media Hub tabs downloads the current data (all businesses) for a leadership update, no screenshotting required.
 
