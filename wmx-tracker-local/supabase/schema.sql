@@ -250,14 +250,20 @@ create policy "authenticated_select" on public.team_contacts
   to authenticated
   using (true);
 
+-- slack_user_id (e.g. "U0123ABC456", from a person's Slack profile —
+-- "..." menu → Copy member ID) lets the notify-ticket function send a real
+-- <@USER_ID> mention that pings them, instead of just naming them in text.
+-- Optional — a null here just falls back to plain text for that person.
+alter table public.team_contacts add column if not exists slack_user_id text;
+
 -- insert/update the real roster here — matches whatever names appear in
 -- the Team tab / ticket assignee dropdown.
-insert into public.team_contacts (name, email) values
-  ('Aly', 'aly@wmx.group'),
-  ('Jeff', 'jeff@wmx.group'),
-  ('Jason', 'jason@wmx.group'),
-  ('Nick', 'nick@wmx.group')
-on conflict (name) do update set email = excluded.email;
+insert into public.team_contacts (name, email, slack_user_id) values
+  ('Aly', 'aly@wmx.group', 'U0B9UCWK147'),
+  ('Jeff', 'jeff@wmx.group', 'U0BPFBYSMP1'),
+  ('Jason', 'jason@wmx.group', 'U0AC36XQ0N7'),
+  ('Nick', 'nick@wmx.group', null)
+on conflict (name) do update set email = excluded.email, slack_user_id = excluded.slack_user_id;
 
 create extension if not exists pg_net with schema extensions;
 

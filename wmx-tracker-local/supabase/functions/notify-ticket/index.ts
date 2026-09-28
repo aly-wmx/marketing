@@ -47,31 +47,36 @@ Deno.serve(async (req: Request) => {
   const bizName = (biz && BIZ_NAME[biz]) || biz || "WMX";
   const results: { slack: boolean | null; email: boolean | null; email_skipped_reason?: string } = { slack: null, email: null };
 
+  // Look up the recipient's contact info once, used by both channels below —
+  // a real Slack mention (<@USER_ID>) actually pings them, unlike plain text.
+  let email: string | null = null;
+  let slackUserId: string | null = null;
+  try {
+    const lookupRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/team_contacts?name=eq.${encodeURIComponent(recipient)}&select=email,slack_user_id`,
+      { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } }
+    );
+    const rows = await lookupRes.json();
+    email = rows?.[0]?.email ?? null;
+    slackUserId = rows?.[0]?.slack_user_id ?? null;
+  } catch {
+    email = null;
+    slackUserId = null;
+  }
+
   // Slack
+  const mention = slackUserId ? `<@${slackUserId}>` : `*${recipient}*`;
   try {
     const slackRes = await fetch(SLACK_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: `:ticket: *${created_by || "Someone"}* assigned *${recipient}* a ticket — "${title}" (${bizName})`,
+        text: `:ticket: *${created_by || "Someone"}* assigned ${mention} a ticket — "${title}" (${bizName})`,
       }),
     });
     results.slack = slackRes.ok;
   } catch {
     results.slack = false;
-  }
-
-  // Look up the recipient's email
-  let email: string | null = null;
-  try {
-    const lookupRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/team_contacts?name=eq.${encodeURIComponent(recipient)}&select=email`,
-      { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } }
-    );
-    const rows = await lookupRes.json();
-    email = rows?.[0]?.email ?? null;
-  } catch {
-    email = null;
   }
 
   if (!email) {

@@ -84,9 +84,13 @@ that calls the `notify-ticket` Edge Function (`supabase/functions/notify-ticket/
    one. Sending is sandboxed to your own Resend account's email until you
    verify a sending domain under **Domains** — do that before relying on
    this for the whole team.
-3. **Who gets emailed**: the `team_contacts` table maps a ticket assignee's
-   name (as it appears in the Team tab / assignee dropdown) to their email.
-   Add/update rows there as the roster changes — there's no UI for it yet.
+3. **Who gets emailed / mentioned**: the `team_contacts` table maps a ticket
+   assignee's name (as it appears in the Team tab / assignee dropdown) to
+   their email, and optionally their Slack member ID (`slack_user_id` — from
+   their Slack profile's "..." menu → Copy member ID). With it set, the
+   Slack message uses a real `<@USER_ID>` mention that pings them instead of
+   just naming them in text. Add/update rows there as the roster changes —
+   there's no UI for it yet.
 4. Fill in `SLACK_WEBHOOK_URL`, `RESEND_API_KEY`, and a `WEBHOOK_SECRET`
    (any random string) at the top of `supabase/functions/notify-ticket/index.ts`,
    deploy it (`supabase functions deploy notify-ticket` or via the
