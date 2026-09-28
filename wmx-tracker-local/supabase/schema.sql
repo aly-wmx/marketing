@@ -128,12 +128,19 @@ create table if not exists public.credential_accounts (
 
 alter table public.credential_accounts enable row level security;
 
--- reads the caller's email straight off their JWT — no auth.users access
--- needed, so no security definer required either.
+-- security definer here is required, not optional: is_admin() is used
+-- inside app_admins' own SELECT policy (below) and credential_accounts'
+-- policy. A plain version would recurse infinitely the moment a client
+-- selects app_admins — evaluating that policy calls is_admin(), whose own
+-- query against app_admins re-triggers the same policy, forever. Running
+-- as the function owner bypasses RLS on its internal query (table owners
+-- aren't subject to their own table's RLS by default), breaking the cycle.
 create or replace function public.is_admin()
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select exists (
     select 1 from public.app_admins a

@@ -1318,8 +1318,9 @@ function AdminTab({ userEmail, logActivity }) {
       const { data: rows, error: err } = await supabase.from("app_admins").select("email").order("email");
       if (err) throw err;
       setAdmins((rows || []).map((r) => r.email));
+      setError(null);
     } catch (e) {
-      console.warn("Could not load admins:", e.message ?? e);
+      setError(e.message ?? "Could not load the admin list.");
     } finally {
       setLoaded(true);
     }
@@ -1370,15 +1371,26 @@ function AdminTab({ userEmail, logActivity }) {
       </div>
 
       <Card style={{ padding: 18, marginBottom: 18 }}>
-        <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>Grant admin access</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && grant()}
-            placeholder="name@wmx.group" type="email" className="wmx-body wmx-focus"
-            style={{ flex: 1, minWidth: 200, padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+        <div className="wmx-display" style={{ fontSize: 14, color: C.ink, marginBottom: 10 }}>Grant access</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <FormField label="Email" span={2}>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && grant()}
+              placeholder="name@wmx.group" type="email" className="wmx-body wmx-focus"
+              style={{ minWidth: 200, padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+          </FormField>
+          <FormField label="Access level">
+            <select value="admin" disabled className="wmx-body"
+              style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6, background: C.bg, color: C.ink }}>
+              <option value="admin">Admin</option>
+            </select>
+          </FormField>
           <button onClick={grant} disabled={busy} className="wmx-body wmx-focus"
-            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: busy ? "default" : "pointer", fontWeight: 600, fontSize: 13 }}>
+            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "9px 16px", cursor: busy ? "default" : "pointer", fontWeight: 600, fontSize: 13 }}>
             Grant
           </button>
+        </div>
+        <div className="wmx-body" style={{ fontSize: 11, color: C.sub, marginTop: 8 }}>
+          "Admin" is the only access level right now — everyone else is a regular member with no elevated access.
         </div>
         {error && <div className="wmx-body" style={{ fontSize: 12, color: C.warn, marginTop: 8 }}>{error}</div>}
       </Card>
@@ -1394,6 +1406,7 @@ function AdminTab({ userEmail, logActivity }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <ShieldCheck size={14} color={C.brass} />
               <span className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{a}</span>
+              <Pill color={C.brass} bg={C.brassSoft}>Admin</Pill>
               {a === userEmail && <Pill color={C.sub} bg={C.bg}>You</Pill>}
             </div>
             <button onClick={() => setRole(a, false)} disabled={busy} className="wmx-body wmx-focus"
