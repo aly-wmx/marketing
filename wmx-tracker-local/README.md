@@ -16,6 +16,7 @@ A real, running copy of the WMX tracker with:
 - **Real branding** — the actual WMX crest (`src/assets/wmx-crest.png`) replaces the placeholder "W" mark in both the sidebar and the redesigned login screen.
 - **Quick-create a ticket from anywhere** — a "New Ticket" button under the sidebar logo jumps to Tickets and opens the popup form directly, no need to switch tabs first.
 - **Overview dashboard** — the default landing tab: portfolio setup %, open tickets, monthly SaaS spend, and team size at a glance, a per-business setup ring you can click into, and the 6 most recent activity-log entries.
+- **Mobile-friendly data tables** — Stack, SaaS & Billing, and KPIs collapse from a table into stacked labeled fields under 720px instead of forcing horizontal scroll.
 
 ## 1. Create a Supabase project (free tier is fine)
 

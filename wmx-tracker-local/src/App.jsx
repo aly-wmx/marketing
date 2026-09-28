@@ -45,6 +45,13 @@ const FONTS = `
 .wmx-main{flex:1;padding:28px 32px;min-width:0;}
 .wmx-ticket-board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
 .wmx-form-grid{display:grid;grid-template-columns:1fr 1fr;}
+.wmx-rtable-head{display:grid;gap:8px;padding:12px 14px;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:${C.sub};}
+.wmx-rtable-row{display:grid;gap:8px;padding:8px 14px;align-items:center;border-top:1px solid ${C.line};}
+.wmx-rtable-row:first-child{border-top:none;}
+.wmx-rtable-label{display:none;}
+.wmx-stack-cols{grid-template-columns:2fr 1fr 2fr 1.6fr 1.3fr 32px;}
+.wmx-saas-cols{grid-template-columns:2fr 0.8fr 1.6fr 2fr 32px;}
+.wmx-kpi-cols{grid-template-columns:2fr 0.9fr 0.9fr 1fr 1.6fr;}
 @media (max-width: 860px){
   .wmx-shell{flex-direction:column;}
   .wmx-sidebar{width:100%;}
@@ -53,6 +60,12 @@ const FONTS = `
   .wmx-nav-group-label{display:none;}
   .wmx-main{padding:18px 16px;}
   .wmx-ticket-board{grid-template-columns:1fr;}
+}
+@media (max-width: 720px){
+  .wmx-rtable-head{display:none;}
+  .wmx-stack-cols,.wmx-saas-cols,.wmx-kpi-cols{grid-template-columns:1fr;}
+  .wmx-rtable-row{gap:10px;padding:14px;}
+  .wmx-rtable-label{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:0.4px;color:${C.sub};font-weight:600;margin-bottom:3px;}
 }
 @media (max-width: 520px){
   .wmx-form-grid{grid-template-columns:1fr;}
@@ -554,32 +567,26 @@ function StackTab({ stack, setStack, logActivity }) {
           <Plus size={15} /> Add tool
         </button>
       } />
-      <Card style={{ padding: 6, overflowX: "auto" }}>
-        <table className="wmx-body" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ textAlign: "left", color: C.sub, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 }}>
-              <th style={{ padding: "12px 14px" }}>Tool</th><th>Manager</th><th>Purpose</th><th>Businesses</th><th>Status</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {stack.map((s) => (
-              <tr key={s.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                <td style={{ padding: "8px 14px" }}><input value={s.name} onChange={(e) => update(s.id, "name", e.target.value)} placeholder="Tool name" className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} /></td>
-                <td><input value={s.manager} onChange={(e) => update(s.id, "manager", e.target.value)} placeholder="—" className="wmx-focus" style={cellInput} /></td>
-                <td><input value={s.purpose} onChange={(e) => update(s.id, "purpose", e.target.value)} placeholder="—" className="wmx-focus" style={{ ...cellInput, color: C.sub }} /></td>
-                <td><BizTogglePills selected={s.biz} onToggle={(bizId) => toggleBiz(s.id, bizId)} /></td>
-                <td><input value={s.status} onChange={(e) => update(s.id, "status", e.target.value)} placeholder="—"
-                  className="wmx-focus" style={{ ...cellInput, color: s.status.startsWith("needs") ? C.warn : C.sub, fontStyle: s.status.startsWith("future") ? "italic" : "normal" }} /></td>
-                <td>
-                  <button onClick={() => removeRow(s.id)} aria-label={`Remove ${s.name || "tool"}`} title={`Remove ${s.name || "tool"}`}
-                    className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
-                    <Trash2 size={13} color={C.sub} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Card className="wmx-body" style={{ padding: 6, fontSize: 13 }}>
+        <div className="wmx-rtable-head wmx-stack-cols">
+          <div>Tool</div><div>Manager</div><div>Purpose</div><div>Businesses</div><div>Status</div><div></div>
+        </div>
+        {stack.map((s) => (
+          <div key={s.id} className="wmx-rtable-row wmx-stack-cols">
+            <div><span className="wmx-rtable-label">Tool</span><input value={s.name} onChange={(e) => update(s.id, "name", e.target.value)} placeholder="Tool name" className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} /></div>
+            <div><span className="wmx-rtable-label">Manager</span><input value={s.manager} onChange={(e) => update(s.id, "manager", e.target.value)} placeholder="—" className="wmx-focus" style={cellInput} /></div>
+            <div><span className="wmx-rtable-label">Purpose</span><input value={s.purpose} onChange={(e) => update(s.id, "purpose", e.target.value)} placeholder="—" className="wmx-focus" style={{ ...cellInput, color: C.sub }} /></div>
+            <div><span className="wmx-rtable-label">Businesses</span><BizTogglePills selected={s.biz} onToggle={(bizId) => toggleBiz(s.id, bizId)} /></div>
+            <div><span className="wmx-rtable-label">Status</span><input value={s.status} onChange={(e) => update(s.id, "status", e.target.value)} placeholder="—"
+              className="wmx-focus" style={{ ...cellInput, color: s.status.startsWith("needs") ? C.warn : C.sub, fontStyle: s.status.startsWith("future") ? "italic" : "normal" }} /></div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => removeRow(s.id)} aria-label={`Remove ${s.name || "tool"}`} title={`Remove ${s.name || "tool"}`}
+                className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
+                <Trash2 size={13} color={C.sub} />
+              </button>
+            </div>
+          </div>
+        ))}
       </Card>
     </>
   );
@@ -636,27 +643,22 @@ function KpiTab({ kpis, setKpis }) {
                 {isOpen ? <ChevronUp size={16} color={C.sub} /> : <ChevronDown size={16} color={C.sub} />}
               </button>
               {isOpen && (
-                <div style={{ padding: "0 18px 18px", borderTop: `1px solid ${C.line}` }}>
-                  <div style={{ overflowX: "auto" }}>
-                    <table className="wmx-body" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, marginTop: 14 }}>
-                      <thead>
-                        <tr style={{ textAlign: "left", color: C.sub, fontSize: 10.5, textTransform: "uppercase" }}>
-                          <th style={{ padding: "6px 0" }}>Metric</th><th>Current</th><th>Target</th><th>Cadence</th><th>Notes</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((k) => (
-                          <tr key={k.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                            <td style={{ padding: "8px 0", color: C.ink }}>{k.metric}</td>
-                            <td><input value={k.current} placeholder="—" onChange={(e) => update(k.id, "current", e.target.value)} className="wmx-body wmx-focus" style={{ width: 70, border: "none", borderBottom: `1px solid ${C.line}`, background: "transparent", fontSize: 12.5, padding: "3px 0" }} /></td>
-                            <td><input value={k.target} placeholder="—" onChange={(e) => update(k.id, "target", e.target.value)} className="wmx-body wmx-focus" style={{ width: 70, border: "none", borderBottom: `1px solid ${C.line}`, background: "transparent", fontSize: 12.5, padding: "3px 0" }} /></td>
-                            <td style={{ color: C.sub }}>{k.cadence}</td>
-                            <td><input value={k.notes} placeholder="—" onChange={(e) => update(k.id, "notes", e.target.value)} className="wmx-body wmx-focus" style={{ width: 130, border: "none", borderBottom: `1px solid ${C.line}`, background: "transparent", fontSize: 12.5, padding: "3px 0" }} /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <div className="wmx-body" style={{ padding: "0 18px 18px", borderTop: `1px solid ${C.line}`, fontSize: 12.5 }}>
+                  <div className="wmx-rtable-head wmx-kpi-cols" style={{ padding: "12px 0 6px", fontSize: 10.5 }}>
+                    <div>Metric</div><div>Current</div><div>Target</div><div>Cadence</div><div>Notes</div>
                   </div>
+                  {rows.map((k) => {
+                    const kpiInput = { width: "100%", border: "none", borderBottom: `1px solid ${C.line}`, background: "transparent", fontSize: 12.5, padding: "3px 0" };
+                    return (
+                      <div key={k.id} className="wmx-rtable-row wmx-kpi-cols" style={{ padding: "8px 0" }}>
+                        <div><span className="wmx-rtable-label">Metric</span><span style={{ color: C.ink }}>{k.metric}</span></div>
+                        <div><span className="wmx-rtable-label">Current</span><input value={k.current} placeholder="—" onChange={(e) => update(k.id, "current", e.target.value)} className="wmx-body wmx-focus" style={kpiInput} /></div>
+                        <div><span className="wmx-rtable-label">Target</span><input value={k.target} placeholder="—" onChange={(e) => update(k.id, "target", e.target.value)} className="wmx-body wmx-focus" style={kpiInput} /></div>
+                        <div><span className="wmx-rtable-label">Cadence</span><span style={{ color: C.sub }}>{k.cadence}</span></div>
+                        <div><span className="wmx-rtable-label">Notes</span><input value={k.notes} placeholder="—" onChange={(e) => update(k.id, "notes", e.target.value)} className="wmx-body wmx-focus" style={kpiInput} /></div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </Card>
@@ -697,36 +699,31 @@ function SaasTab({ saas, setSaas, logActivity }) {
           </Card>
         </div>
       } />
-      <Card style={{ padding: 6, overflowX: "auto" }}>
-        <table className="wmx-body" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ textAlign: "left", color: C.sub, fontSize: 11, textTransform: "uppercase" }}>
-              <th style={{ padding: "12px 14px" }}>Tool</th><th>$ / month</th><th>Businesses</th><th>Notes</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {saas.map((s) => (
-              <tr key={s.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                <td style={{ padding: "8px 14px" }}><input value={s.tool} onChange={(e) => update(s.id, "tool", e.target.value)} placeholder="Tool name" className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} /></td>
-                <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    $<input type="number" min="0" value={s.cost} onChange={(e) => update(s.id, "cost", e.target.value === "" ? 0 : Number(e.target.value))}
-                      className="wmx-focus" style={{ ...cellInput, width: 70, fontVariantNumeric: "tabular-nums" }} />
-                  </div>
-                </td>
-                <td><BizTogglePills selected={s.biz} onToggle={(bizId) => toggleBiz(s.id, bizId)} /></td>
-                <td><input value={s.notes} onChange={(e) => update(s.id, "notes", e.target.value)} placeholder="—"
-                  className="wmx-focus" style={{ ...cellInput, color: s.notes?.toLowerCase().includes("confirm") ? C.warn : C.sub }} /></td>
-                <td>
-                  <button onClick={() => removeRow(s.id)} aria-label={`Remove ${s.tool || "tool"}`} title={`Remove ${s.tool || "tool"}`}
-                    className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
-                    <Trash2 size={13} color={C.sub} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Card className="wmx-body" style={{ padding: 6, fontSize: 13 }}>
+        <div className="wmx-rtable-head wmx-saas-cols">
+          <div>Tool</div><div>$ / month</div><div>Businesses</div><div>Notes</div><div></div>
+        </div>
+        {saas.map((s) => (
+          <div key={s.id} className="wmx-rtable-row wmx-saas-cols">
+            <div><span className="wmx-rtable-label">Tool</span><input value={s.tool} onChange={(e) => update(s.id, "tool", e.target.value)} placeholder="Tool name" className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} /></div>
+            <div>
+              <span className="wmx-rtable-label">$ / month</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                $<input type="number" min="0" value={s.cost} onChange={(e) => update(s.id, "cost", e.target.value === "" ? 0 : Number(e.target.value))}
+                  className="wmx-focus" style={{ ...cellInput, width: 70, fontVariantNumeric: "tabular-nums" }} />
+              </div>
+            </div>
+            <div><span className="wmx-rtable-label">Businesses</span><BizTogglePills selected={s.biz} onToggle={(bizId) => toggleBiz(s.id, bizId)} /></div>
+            <div><span className="wmx-rtable-label">Notes</span><input value={s.notes} onChange={(e) => update(s.id, "notes", e.target.value)} placeholder="—"
+              className="wmx-focus" style={{ ...cellInput, color: s.notes?.toLowerCase().includes("confirm") ? C.warn : C.sub }} /></div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => removeRow(s.id)} aria-label={`Remove ${s.tool || "tool"}`} title={`Remove ${s.tool || "tool"}`}
+                className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
+                <Trash2 size={13} color={C.sub} />
+              </button>
+            </div>
+          </div>
+        ))}
       </Card>
     </>
   );
