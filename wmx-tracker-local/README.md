@@ -15,6 +15,7 @@ A real, running copy of the WMX tracker with:
 - **Admin tab** (admin-only) — lists every real account (via `admin_set_role`/`admin_list_users`, both `security definer` Postgres functions that re-check admin status server-side) with an editable access-level dropdown per row, so any existing account's role can be changed directly, plus a way to pre-authorize an email that hasn't signed in yet.
 - **Real branding** — the actual WMX crest (`src/assets/wmx-crest.png`) replaces the placeholder "W" mark in both the sidebar and the redesigned login screen.
 - **Quick-create a ticket from anywhere** — a "New Ticket" button under the sidebar logo jumps to Tickets and opens the popup form directly, no need to switch tabs first.
+- **Overview dashboard** — the default landing tab: portfolio setup %, open tickets, monthly SaaS spend, and team size at a glance, a per-business setup ring you can click into, and the 6 most recent activity-log entries.
 
 ## 1. Create a Supabase project (free tier is fine)
 

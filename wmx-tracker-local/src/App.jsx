@@ -3,7 +3,7 @@ import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
   ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
-  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download, ShieldCheck,
+  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download, ShieldCheck, LayoutDashboard,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import wmxCrest from "./assets/wmx-crest.png";
@@ -345,6 +345,109 @@ function PageHeader({ eyebrow, title, right }) {
 }
 
 /* ---------------------------------- tabs ------------------------------------ */
+
+function OverviewTab({ data, portfolioPct, openTicketCount, setTab }) {
+  const [recent, setRecent] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from("activity_log").select("*").order("created_at", { ascending: false }).limit(6)
+      .then(({ data: rows, error }) => {
+        if (cancelled) return;
+        if (!error) setRecent(rows || []);
+        setLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("overview_activity_changes")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, (payload) => {
+        setRecent((prev) => [payload.new, ...prev].slice(0, 6));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const saasTotal = data.saas.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+  const teamCount = data.team.filter((m) => !m.vendor).length;
+
+  const stats = [
+    { label: "Portfolio setup", value: `${portfolioPct}%`, color: C.brass },
+    { label: "Open tickets", value: openTicketCount, color: C.ink },
+    { label: "Monthly SaaS spend", value: `$${saasTotal.toLocaleString()}`, color: C.ink },
+    { label: "Team", value: teamCount, color: C.ink },
+  ];
+
+  return (
+    <>
+      <PageHeader eyebrow="At a glance · across all 4 businesses" title="Overview" />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 16, marginBottom: 24 }}>
+        {stats.map((s) => (
+          <Card key={s.label} style={{ padding: 18 }}>
+            <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6 }}>{s.label}</div>
+            <div className="wmx-display" style={{ fontSize: 28, color: s.color, marginTop: 4 }}>{s.value}</div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="wmx-display" style={{ fontSize: 15, color: C.ink, marginBottom: 12 }}>By business</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px,1fr))", gap: 16, marginBottom: 28 }}>
+        {BUSINESSES.map((b) => {
+          const items = data.onboarding[b.id];
+          const pct = weightedPct(items);
+          const bizOpenTickets = data.tickets.filter((t) => t.biz === b.id && t.status !== "resolved").length;
+          return (
+            <Card key={b.id} onClick={() => setTab("setup")} className="wmx-focus wmx-icon-btn"
+              style={{ padding: 16, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+              <Ring pct={pct} size={48} color={b.color} />
+              <div>
+                <div className="wmx-display" style={{ fontSize: 14, color: C.ink }}>{b.name}</div>
+                <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub, marginTop: 2 }}>
+                  {bizOpenTickets} open ticket{bizOpenTickets !== 1 ? "s" : ""}
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="wmx-display" style={{ fontSize: 15, color: C.ink, marginBottom: 12 }}>Recent activity</div>
+      {!loaded && <LoadingState />}
+      {loaded && (
+        <Card style={{ padding: 4 }}>
+          {recent.length === 0 && <EmptyState icon={ActivityIcon} title="No activity yet" compact />}
+          {recent.map((e, i) => {
+            const b = e.biz ? bizById(e.biz) : null;
+            return (
+              <div key={e.id} style={{ display: "flex", gap: 10, padding: "10px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.line}` }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: ACTIVITY_ICON_COLOR[e.action] || C.sub, marginTop: 5, flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div className="wmx-body" style={{ fontSize: 13, color: C.ink }}>
+                    <b>{e.actor}</b> {e.detail}
+                    {b && <span style={{ color: C.sub }}> · {b.name}</span>}
+                  </div>
+                  <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, marginTop: 1 }}>
+                    {new Date(e.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {recent.length > 0 && (
+            <button onClick={() => setTab("activity")} className="wmx-body wmx-focus wmx-icon-btn"
+              style={{ width: "100%", textAlign: "center", padding: "10px 14px", border: "none", borderTop: `1px solid ${C.line}`, cursor: "pointer", fontSize: 12, color: C.brass, fontWeight: 600 }}>
+              View all activity
+            </button>
+          )}
+        </Card>
+      )}
+    </>
+  );
+}
 
 function SetupProgress({ onboarding, setOnboarding, logActivity }) {
   return (
@@ -1254,6 +1357,7 @@ const TAB_GROUPS = [
   {
     label: "Work",
     tabs: [
+      { id: "overview", label: "Overview", icon: LayoutDashboard },
       { id: "setup", label: "Setup Progress", icon: ListChecks },
       { id: "tickets", label: "Tickets", icon: Inbox },
       { id: "team", label: "Team", icon: Users },
@@ -1653,6 +1757,7 @@ function NamePrompt({ current, onChoose, onCancel }) {
 
 function OnboardingTour({ onDismiss }) {
   const steps = [
+    { icon: LayoutDashboard, title: "Overview", body: "Your landing page — key numbers and recent activity across all 4 businesses at a glance." },
     { icon: ListChecks, title: "Setup Progress", body: "Track onboarding for each business — updates sync live to the whole team as soon as anyone makes them." },
     { icon: BarChart3, title: "KPIs", body: "Four tabs, one per business — Watermark Design Build, Twofold Coffee & Kitchen, Manolo Roofing, Garrison House." },
     { icon: Share2, title: "Social Media Hub", body: "Log weekly follower counts per platform and see the week-over-week change." },
@@ -1693,7 +1798,7 @@ function OnboardingTour({ onDismiss }) {
 }
 
 export default function WMXTracker() {
-  const [tab, setTab] = useState("setup");
+  const [tab, setTab] = useState("overview");
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [data, setData] = useState(seedState);
   const [loaded, setLoaded] = useState(false);
@@ -2102,6 +2207,7 @@ export default function WMXTracker() {
               </div>
             </div>
           )}
+          {tab === "overview" && <OverviewTab data={data} portfolioPct={portfolioPct} openTicketCount={openTicketCount} setTab={setTab} />}
           {tab === "setup" && <SetupProgress onboarding={data.onboarding} setOnboarding={setOnboarding} logActivity={logActivity} />}
           {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} canEdit={isAdmin} logActivity={logActivity} />}
           {tab === "stack" && <StackTab stack={data.stack} setStack={setStack} logActivity={logActivity} />}
