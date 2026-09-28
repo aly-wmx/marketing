@@ -51,7 +51,8 @@ const FONTS = `
 .wmx-rtable-label{display:none;}
 .wmx-stack-cols{grid-template-columns:2fr 1fr 2fr 1.6fr 1.3fr 32px;}
 .wmx-saas-cols{grid-template-columns:2fr 0.8fr 1.6fr 2fr 32px;}
-.wmx-kpi-cols{grid-template-columns:2fr 0.9fr 0.9fr 1fr 1.6fr;}
+.wmx-kpi-cols{grid-template-columns:2fr 0.9fr 0.9fr 0.9fr 1fr 1.4fr;}
+.wmx-social-cols{grid-template-columns:1.3fr 1fr 0.9fr 0.7fr 0.9fr 0.7fr;}
 @media (max-width: 860px){
   .wmx-shell{flex-direction:column;}
   .wmx-sidebar{width:100%;}
@@ -63,7 +64,7 @@ const FONTS = `
 }
 @media (max-width: 720px){
   .wmx-rtable-head{display:none;}
-  .wmx-stack-cols,.wmx-saas-cols,.wmx-kpi-cols{grid-template-columns:1fr;}
+  .wmx-stack-cols,.wmx-saas-cols,.wmx-kpi-cols,.wmx-social-cols{grid-template-columns:1fr;}
   .wmx-rtable-row{gap:10px;padding:14px;}
   .wmx-rtable-label{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:0.4px;color:${C.sub};font-weight:600;margin-bottom:3px;}
 }
@@ -200,6 +201,41 @@ const KPI_METRICS_BY_CATEGORY = [
   ["destination", ["WiFi capture sign-ups / week", "Visit → membership conversion"]],
   ["seo", ["AI baseline: mentions / 25 questions", "Organic map-pack impressions"]],
 ];
+
+// Current/target are free-text ("$1,200", "3.4%", "#2 avg") so attainment is
+// computed by pulling the first number out of each and comparing — inexact,
+// but turns two raw strings into a signal instead of making someone read
+// both and do the math themselves on every metric, every time.
+const KPI_LOWER_IS_BETTER = ["cost per lead", "cpa", "position", "budget cap"];
+function parseKpiNumber(str) {
+  if (!str) return null;
+  const m = String(str).match(/-?\d[\d,]*\.?\d*/);
+  if (!m) return null;
+  const n = parseFloat(m[0].replace(/,/g, ""));
+  return isNaN(n) ? null : n;
+}
+function kpiAttainment(k) {
+  const cur = parseKpiNumber(k.current);
+  const tgt = parseKpiNumber(k.target);
+  if (cur === null || tgt === null || tgt === 0) return null;
+  const lowerIsBetter = KPI_LOWER_IS_BETTER.some((s) => k.metric.toLowerCase().includes(s));
+  const ratio = lowerIsBetter ? tgt / cur : cur / tgt;
+  if (!isFinite(ratio) || ratio < 0) return null;
+  if (ratio >= 1) return "ahead";
+  if (ratio >= 0.85) return "track";
+  return "behind";
+}
+const KPI_STATUS_META = {
+  ahead: { label: "On target", color: C.good },
+  track: { label: "Close", color: C.brass },
+  behind: { label: "Behind", color: C.warn },
+};
+function KpiStatusBadge({ k }) {
+  const status = kpiAttainment(k);
+  if (!status) return <span className="wmx-body" style={{ fontSize: 11, color: C.sub }}>—</span>;
+  const meta = KPI_STATUS_META[status];
+  return <Pill color={meta.color} bg={`${meta.color}22`}>{meta.label}</Pill>;
+}
 
 function seedKpis() {
   const rows = [];
@@ -362,6 +398,7 @@ function PageHeader({ eyebrow, title, right }) {
 function OverviewTab({ data, portfolioPct, openTicketCount, setTab }) {
   const [recent, setRecent] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [snapshots, setSnapshots] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -384,11 +421,39 @@ function OverviewTab({ data, portfolioPct, openTicketCount, setTab }) {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // Same weekly_snapshots table SocialTab reads — just the followers column,
+  // to roll the whole portfolio's week-over-week change into one number here.
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from("weekly_snapshots").select("brand_id, platform_id, week_ending, followers")
+      .then(({ data: rows, error }) => { if (!error && !cancelled) setSnapshots(rows || []); });
+    return () => { cancelled = true; };
+  }, []);
+
   const saasTotal = data.saas.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
   const teamCount = data.team.filter((m) => !m.vendor).length;
 
+  const kpiBehindCount = useMemo(
+    () => data.kpis.filter((k) => kpiAttainment(k) === "behind").length,
+    [data.kpis]
+  );
+
+  const followerGrowth = useMemo(() => {
+    const byKey = {};
+    snapshots.forEach((s) => { (byKey[`${s.brand_id}:${s.platform_id}`] ||= []).push(s); });
+    let total = 0;
+    Object.values(byKey).forEach((arr) => {
+      arr.sort((a, b) => b.week_ending.localeCompare(a.week_ending));
+      const [latest, previous] = arr;
+      if (latest?.followers != null && previous?.followers != null) total += latest.followers - previous.followers;
+    });
+    return total;
+  }, [snapshots]);
+
   const stats = [
     { label: "Portfolio setup", value: `${portfolioPct}%`, color: C.brass },
+    { label: "KPIs behind target", value: kpiBehindCount, color: kpiBehindCount > 0 ? C.warn : C.good },
+    { label: "Follower growth (latest week)", value: `${followerGrowth > 0 ? "+" : ""}${followerGrowth.toLocaleString()}`, color: followerGrowth >= 0 ? C.good : C.warn },
     { label: "Open tickets", value: openTicketCount, color: C.ink },
     { label: "Monthly SaaS spend", value: `$${saasTotal.toLocaleString()}`, color: C.ink },
     { label: "Team", value: teamCount, color: C.ink },
@@ -545,6 +610,8 @@ function TeamTab({ team, setTeam, canEdit, logActivity }) {
 const cellInput = { width: "100%", border: "none", background: "transparent", fontSize: 13, padding: "4px 2px", color: C.ink };
 
 function StackTab({ stack, setStack, logActivity }) {
+  const [search, setSearch] = useState("");
+  const visible = stack.filter((s) => !search.trim() || s.name.toLowerCase().includes(search.trim().toLowerCase()));
   const update = (id, field, val) => setStack((prev) => prev.map((s) => s.id === id ? { ...s, [field]: val } : s));
   const toggleBiz = (id, bizId) => setStack((prev) => prev.map((s) => s.id !== id ? s : {
     ...s, biz: s.biz.includes(bizId) ? s.biz.filter((x) => x !== bizId) : [...s.biz, bizId],
@@ -567,11 +634,14 @@ function StackTab({ stack, setStack, logActivity }) {
           <Plus size={15} /> Add tool
         </button>
       } />
+      <input placeholder="Search tools…" value={search} onChange={(e) => setSearch(e.target.value)} className="wmx-body wmx-focus"
+        style={{ padding: 7, border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12.5, minWidth: 200, marginBottom: 12, display: "block" }} />
       <Card className="wmx-body" style={{ padding: 6, fontSize: 13 }}>
         <div className="wmx-rtable-head wmx-stack-cols">
           <div>Tool</div><div>Manager</div><div>Purpose</div><div>Businesses</div><div>Status</div><div></div>
         </div>
-        {stack.map((s) => (
+        {visible.length === 0 && <EmptyState title="No matches" subtitle="Try a different search." compact />}
+        {visible.map((s) => (
           <div key={s.id} className="wmx-rtable-row wmx-stack-cols">
             <div><span className="wmx-rtable-label">Tool</span><input value={s.name} onChange={(e) => update(s.id, "name", e.target.value)} placeholder="Tool name" className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} /></div>
             <div><span className="wmx-rtable-label">Manager</span><input value={s.manager} onChange={(e) => update(s.id, "manager", e.target.value)} placeholder="—" className="wmx-focus" style={cellInput} /></div>
@@ -595,6 +665,7 @@ function StackTab({ stack, setStack, logActivity }) {
 function KpiTab({ kpis, setKpis }) {
   const [activeBiz, setActiveBiz] = useState(BUSINESSES[0].id);
   const [open, setOpen] = useState({ leadgen: true });
+  const [search, setSearch] = useState("");
   const update = (id, field, val) => setKpis((prev) => prev.map((k) => k.id === id ? { ...k, [field]: val } : k));
   const metricCount = KPI_METRICS_BY_CATEGORY.reduce((sum, [, metrics]) => sum + metrics.length, 0);
 
@@ -631,21 +702,34 @@ function KpiTab({ kpis, setKpis }) {
         ))}
       </div>
 
+      <input placeholder="Search metrics…" value={search} onChange={(e) => setSearch(e.target.value)} className="wmx-body wmx-focus"
+        style={{ padding: 7, border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12.5, minWidth: 200, marginBottom: 12, display: "block" }} />
+
+      {search.trim() && !kpis.some((k) => k.biz === activeBiz && k.metric.toLowerCase().includes(search.trim().toLowerCase())) && (
+        <EmptyState title="No matches" subtitle="Try a different search." compact />
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {KPI_CATEGORIES.map((cat) => {
-          const rows = kpis.filter((k) => k.categoryId === cat.id && k.biz === activeBiz);
-          const isOpen = !!open[cat.id];
+          const q = search.trim().toLowerCase();
+          const rows = kpis.filter((k) => k.categoryId === cat.id && k.biz === activeBiz && (!q || k.metric.toLowerCase().includes(q)));
+          if (q && rows.length === 0) return null;
+          const isOpen = !!open[cat.id] || !!q;
+          const behindCount = rows.filter((k) => kpiAttainment(k) === "behind").length;
           return (
             <Card key={cat.id} style={{ padding: 0, overflow: "hidden" }}>
               <button onClick={() => setOpen((o) => ({ ...o, [cat.id]: !o[cat.id] }))} aria-expanded={isOpen} className="wmx-focus wmx-icon-btn"
                 style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", border: "none", cursor: "pointer" }}>
-                <span className="wmx-display" style={{ fontSize: 15, color: C.ink }}>{cat.name}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="wmx-display" style={{ fontSize: 15, color: C.ink }}>{cat.name}</span>
+                  {behindCount > 0 && <Pill color={C.warn} bg={`${C.warn}22`}>{behindCount} behind</Pill>}
+                </span>
                 {isOpen ? <ChevronUp size={16} color={C.sub} /> : <ChevronDown size={16} color={C.sub} />}
               </button>
               {isOpen && (
                 <div className="wmx-body" style={{ padding: "0 18px 18px", borderTop: `1px solid ${C.line}`, fontSize: 12.5 }}>
                   <div className="wmx-rtable-head wmx-kpi-cols" style={{ padding: "12px 0 6px", fontSize: 10.5 }}>
-                    <div>Metric</div><div>Current</div><div>Target</div><div>Cadence</div><div>Notes</div>
+                    <div>Metric</div><div>Current</div><div>Target</div><div>Status</div><div>Cadence</div><div>Notes</div>
                   </div>
                   {rows.map((k) => {
                     const kpiInput = { width: "100%", border: "none", borderBottom: `1px solid ${C.line}`, background: "transparent", fontSize: 12.5, padding: "3px 0" };
@@ -654,6 +738,7 @@ function KpiTab({ kpis, setKpis }) {
                         <div><span className="wmx-rtable-label">Metric</span><span style={{ color: C.ink }}>{k.metric}</span></div>
                         <div><span className="wmx-rtable-label">Current</span><input value={k.current} placeholder="—" onChange={(e) => update(k.id, "current", e.target.value)} className="wmx-body wmx-focus" style={kpiInput} /></div>
                         <div><span className="wmx-rtable-label">Target</span><input value={k.target} placeholder="—" onChange={(e) => update(k.id, "target", e.target.value)} className="wmx-body wmx-focus" style={kpiInput} /></div>
+                        <div><span className="wmx-rtable-label">Status</span><KpiStatusBadge k={k} /></div>
                         <div><span className="wmx-rtable-label">Cadence</span><span style={{ color: C.sub }}>{k.cadence}</span></div>
                         <div><span className="wmx-rtable-label">Notes</span><input value={k.notes} placeholder="—" onChange={(e) => update(k.id, "notes", e.target.value)} className="wmx-body wmx-focus" style={kpiInput} /></div>
                       </div>
@@ -670,7 +755,15 @@ function KpiTab({ kpis, setKpis }) {
 }
 
 function SaasTab({ saas, setSaas, logActivity }) {
+  const [search, setSearch] = useState("");
   const total = saas.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+  // Full cost per business it's billed to, not a divided share — a $297
+  // tool serving all 4 businesses fully serves each one, so this is "spend
+  // touching this business," not a partition that sums back to `total`.
+  const spendByBiz = BUSINESSES.map((b) => ({
+    ...b, spend: saas.filter((s) => s.biz.includes(b.id)).reduce((sum, s) => sum + (Number(s.cost) || 0), 0),
+  }));
+  const visible = saas.filter((s) => !search.trim() || s.tool.toLowerCase().includes(search.trim().toLowerCase()));
   const update = (id, field, val) => setSaas((prev) => prev.map((s) => s.id === id ? { ...s, [field]: val } : s));
   const toggleBiz = (id, bizId) => setSaas((prev) => prev.map((s) => s.id !== id ? s : {
     ...s, biz: s.biz.includes(bizId) ? s.biz.filter((x) => x !== bizId) : [...s.biz, bizId],
@@ -699,11 +792,25 @@ function SaasTab({ saas, setSaas, logActivity }) {
           </Card>
         </div>
       } />
+
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 18 }}>
+        {spendByBiz.map((b) => (
+          <Card key={b.id} style={{ padding: "10px 16px" }}>
+            <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6 }}>{b.name}</div>
+            <div className="wmx-display" style={{ fontSize: 17, color: b.color, marginTop: 2 }}>${b.spend.toLocaleString()}</div>
+          </Card>
+        ))}
+      </div>
+
+      <input placeholder="Search tools…" value={search} onChange={(e) => setSearch(e.target.value)} className="wmx-body wmx-focus"
+        style={{ padding: 7, border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12.5, minWidth: 200, marginBottom: 12, display: "block" }} />
+
       <Card className="wmx-body" style={{ padding: 6, fontSize: 13 }}>
         <div className="wmx-rtable-head wmx-saas-cols">
           <div>Tool</div><div>$ / month</div><div>Businesses</div><div>Notes</div><div></div>
         </div>
-        {saas.map((s) => (
+        {visible.length === 0 && <EmptyState title="No matches" subtitle="Try a different search." compact />}
+        {visible.map((s) => (
           <div key={s.id} className="wmx-rtable-row wmx-saas-cols">
             <div><span className="wmx-rtable-label">Tool</span><input value={s.tool} onChange={(e) => update(s.id, "tool", e.target.value)} placeholder="Tool name" className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} /></div>
             <div>
@@ -834,6 +941,11 @@ function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, con
         <Pill color={b.color} bg={b.soft}>{b.name}</Pill>
         <Pill color={C.sub} bg={C.bg}>{t.type}</Pill>
         <Pill color={PRIORITY_COLOR[t.priority] || C.brass} bg={C.bg}>{PRIORITY_LABEL[t.priority] || "Medium"}</Pill>
+        {overdue && (
+          <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color: C.warn, background: `${C.warn}1a`, borderRadius: 999, padding: "3px 9px" }}>
+            <AlertTriangle size={11} /> Overdue
+          </span>
+        )}
         <select value={t.assignee || ""} onChange={(e) => onReassign(t.id, e.target.value)} draggable={false}
           className="wmx-body wmx-focus"
           style={{ fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 999, border: `1px solid ${t.assignee ? C.brass : C.line}`, background: t.assignee ? C.brassSoft : "transparent", color: t.assignee ? C.brass : C.sub, cursor: "pointer" }}>
@@ -997,7 +1109,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
               </FormField>
               <FormField label="Type">
                 <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
-                  {["question", "idea", "request", "issue"].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+                  {["campaign", "content", "request", "question", "idea", "issue"].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
                 </select>
               </FormField>
               <FormField label="Priority">
@@ -1259,6 +1371,51 @@ function SocialTab({ logActivity }) {
       {!loaded && <LoadingState label="Loading social stats…" />}
       {loaded && brands.length === 0 && (
         <EmptyState icon={Share2} title="Nothing set up yet" subtitle="No brands/platforms found in Supabase yet." />
+      )}
+
+      {loaded && brands.length > 0 && snapshots.length === 0 && (
+        <EmptyState icon={Share2} title="No stats logged yet" subtitle="Log a follower/engagement count below to start building the portfolio comparison." />
+      )}
+
+      {loaded && brands.length > 0 && snapshots.length > 0 && (
+        <Card className="wmx-body" style={{ padding: 6, fontSize: 13, marginBottom: 18 }}>
+          <div className="wmx-rtable-head wmx-social-cols">
+            <div>Business</div><div>Platform</div><div>Followers</div><div>Δ</div><div>Engagement</div><div>Δ</div>
+          </div>
+          {BUSINESSES.flatMap((b) => {
+            const brandRow = brands.find((row) => row.slug === BRAND_SLUG_BY_BIZ[b.id]);
+            if (!brandRow) return [];
+            return platforms.map((p) => {
+              const history = historyByKey[`${brandRow.id}:${p.id}`] || [];
+              const latest = history[0];
+              if (!latest) return null;
+              const previous = history[1];
+              const fDelta = latest.followers != null && previous?.followers != null ? latest.followers - previous.followers : null;
+              const eDelta = latest.engagement != null && previous?.engagement != null ? latest.engagement - previous.engagement : null;
+              return (
+                <div key={`${b.id}:${p.id}`} className="wmx-rtable-row wmx-social-cols wmx-focus wmx-icon-btn" role="button" tabIndex={0}
+                  onClick={() => { setActiveBiz(b.id); setActivePlatform(p.id); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { setActiveBiz(b.id); setActivePlatform(p.id); } }}
+                  style={{ cursor: "pointer" }}>
+                  <div><span className="wmx-rtable-label">Business</span><span style={{ color: C.ink, fontWeight: 600 }}>{b.name}</span></div>
+                  <div><span className="wmx-rtable-label">Platform</span><span style={{ color: C.sub }}>{p.name}</span></div>
+                  <div><span className="wmx-rtable-label">Followers</span>{latest.followers?.toLocaleString() ?? "—"}</div>
+                  <div><span className="wmx-rtable-label">Follower Δ</span>
+                    {fDelta === null ? <span style={{ color: C.sub }}>—</span> : (
+                      <span style={{ color: fDelta > 0 ? C.good : fDelta < 0 ? C.warn : C.sub, fontWeight: 600 }}>{fDelta > 0 ? "+" : ""}{fDelta.toLocaleString()}</span>
+                    )}
+                  </div>
+                  <div><span className="wmx-rtable-label">Engagement</span>{latest.engagement?.toLocaleString() ?? "—"}</div>
+                  <div><span className="wmx-rtable-label">Engagement Δ</span>
+                    {eDelta === null ? <span style={{ color: C.sub }}>—</span> : (
+                      <span style={{ color: eDelta > 0 ? C.good : eDelta < 0 ? C.warn : C.sub, fontWeight: 600 }}>{eDelta > 0 ? "+" : ""}{eDelta.toLocaleString()}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            }).filter(Boolean);
+          })}
+        </Card>
       )}
 
       {loaded && brands.length > 0 && (() => {

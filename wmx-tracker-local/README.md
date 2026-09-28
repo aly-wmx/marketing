@@ -15,8 +15,14 @@ A real, running copy of the WMX tracker with:
 - **Admin tab** (admin-only) — lists every real account (via `admin_set_role`/`admin_list_users`, both `security definer` Postgres functions that re-check admin status server-side) with an editable access-level dropdown per row, so any existing account's role can be changed directly, plus a way to pre-authorize an email that hasn't signed in yet.
 - **Real branding** — the actual WMX crest (`src/assets/wmx-crest.png`) replaces the placeholder "W" mark in both the sidebar and the redesigned login screen.
 - **Quick-create a ticket from anywhere** — a "New Ticket" button under the sidebar logo jumps to Tickets and opens the popup form directly, no need to switch tabs first.
-- **Overview dashboard** — the default landing tab: portfolio setup %, open tickets, monthly SaaS spend, and team size at a glance, a per-business setup ring you can click into, and the 6 most recent activity-log entries.
+- **Overview dashboard** — the default landing tab, led by marketing-outcome numbers (KPIs behind target, portfolio-wide follower growth for the latest week) ahead of the operational ones (portfolio setup %, open tickets, monthly SaaS spend, team size), plus a per-business setup ring you can click into and the 6 most recent activity-log entries.
 - **Mobile-friendly data tables** — Stack, SaaS & Billing, and KPIs collapse from a table into stacked labeled fields under 720px instead of forcing horizontal scroll.
+- **KPI attainment at a glance** — every metric row gets an On target / Close / Behind badge computed from Current vs. Target (parsed out of the free-text values), and each category header shows how many of its metrics are behind without needing to expand it.
+- **Social Media Hub portfolio comparison** — a table above the per-business drill-down shows every business × platform combo's latest followers/engagement and week-over-week deltas at once; click a row to jump into that combo's detail and trend lines.
+- **Overdue tickets are flagged on the card itself** — an "Overdue" badge next to the priority pill, not just a color change buried in the metadata line.
+- **SaaS spend by business** — chips above the SaaS & Billing table show monthly spend touching each business (a shared tool counts fully toward each business it serves, so these don't sum back to the total — they answer "how much is being spent on this business's stack," not "what's this business's exclusive share").
+- **Marketing-shaped ticket types** — Campaign and Content join Request/Question/Idea/Issue, so deadline-driven marketing work isn't lumped in with generic requests.
+- **Search on Stack, SaaS & Billing, and KPIs** — matches Tickets' search; KPIs search also auto-expands any category with a match.
 
 ## 1. Create a Supabase project (free tier is fine)
 
