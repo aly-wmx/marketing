@@ -31,6 +31,8 @@ const FONTS = `
 .wmx-display{font-family:'Archivo',sans-serif;}
 .wmx-body{font-family:'Inter',sans-serif;}
 .wmx-focus:focus-visible{outline:2px solid ${C.brass};outline-offset:2px;}
+.wmx-nav-btn{background:transparent;transition:background .12s;}
+.wmx-nav-btn:hover{background:${C.bg};}
 .wmx-spin{animation:wmx-spin .8s linear infinite;}
 @keyframes wmx-spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .wmx-shell{display:flex;}
@@ -768,8 +770,7 @@ function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, con
   );
 }
 
-function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAssigned, canDelete, logActivity }) {
-  const [showForm, setShowForm] = useState(false);
+function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAssigned, canDelete, logActivity, showForm, setShowForm }) {
   const blankForm = () => ({ biz: "wm", type: "question", title: "", details: "", submitter: userName || "", assignee: "", priority: "medium", dueDate: "" });
   const [form, setForm] = useState(blankForm);
   const [filterBiz, setFilterBiz] = useState("all");
@@ -1648,6 +1649,7 @@ function OnboardingTour({ onDismiss }) {
 
 export default function WMXTracker() {
   const [tab, setTab] = useState("setup");
+  const [showTicketForm, setShowTicketForm] = useState(false);
   const [data, setData] = useState(seedState);
   const [loaded, setLoaded] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -1929,6 +1931,11 @@ export default function WMXTracker() {
           </div>
         </div>
 
+        <button onClick={() => { setTab("tickets"); setShowTicketForm(true); }} className="wmx-body wmx-focus"
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.ink, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, padding: "10px 12px", fontWeight: 600 }}>
+          <Plus size={15} /> New Ticket
+        </button>
+
         <Card style={{ padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
           <Ring pct={portfolioPct} size={52} color={C.brass} />
           <div>
@@ -1997,11 +2004,11 @@ export default function WMXTracker() {
             const active = tab === t.id;
             const badge = t.id === "tickets" && openTicketCount > 0 ? openTicketCount : null;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)} className="wmx-focus"
+              <button key={t.id} onClick={() => setTab(t.id)} className="wmx-focus wmx-nav-btn"
                 style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8,
                   border: "none", cursor: "pointer", textAlign: "left",
-                  background: active ? C.brassSoft : "transparent",
+                  background: active ? C.brassSoft : undefined,
                   borderLeft: active ? `3px solid ${C.brass}` : "3px solid transparent",
                 }}>
                 <Icon size={16} color={active ? C.brass : C.sub} />
@@ -2054,7 +2061,7 @@ export default function WMXTracker() {
           {tab === "social" && <SocialTab logActivity={logActivity} />}
           {tab === "saas" && <SaasTab saas={data.saas} setSaas={setSaas} logActivity={logActivity} />}
           {tab === "accounts" && isAdmin && <AccountsTab />}
-          {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} canDelete={isAdmin} logActivity={logActivity} />}
+          {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} canDelete={isAdmin} logActivity={logActivity} showForm={showTicketForm} setShowForm={setShowTicketForm} />}
           {tab === "activity" && <ActivityTab />}
           {tab === "admin" && isAdmin && <AdminTab userEmail={session?.user?.email} logActivity={logActivity} />}
 
