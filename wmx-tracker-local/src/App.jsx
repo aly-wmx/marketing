@@ -807,12 +807,17 @@ function LoginScreen() {
   const withGoogle = async () => {
     setGoogleBusy(true);
     setError(null);
-    const { error: err } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    });
-    if (err) { setError(err.message); setGoogleBusy(false); }
-    // on success the browser redirects away, so no need to reset googleBusy
+    try {
+      const { error: err } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
+      });
+      if (err) { setError(err.message); setGoogleBusy(false); }
+      // on success the browser redirects away, so no need to reset googleBusy
+    } catch (e) {
+      setError(e.message ?? "Could not start Google sign-in.");
+      setGoogleBusy(false);
+    }
   };
 
   const submit = async (e) => {
@@ -821,11 +826,21 @@ function LoginScreen() {
     setBusy(true);
     setError(null);
     setNotice(null);
-    const fn = mode === "signin" ? supabase.auth.signInWithPassword : supabase.auth.signUp;
-    const { error: err } = await fn({ email: email.trim(), password });
-    setBusy(false);
-    if (err) setError(err.message);
-    else if (mode === "signup") setNotice("Check your email to confirm your account, then sign in.");
+    try {
+      // Call directly on supabase.auth (not destructured into a variable) —
+      // these are class methods that rely on `this`, and destructuring them
+      // off the object loses that binding, throwing before any request
+      // is ever sent.
+      const { error: err } = mode === "signin"
+        ? await supabase.auth.signInWithPassword({ email: email.trim(), password })
+        : await supabase.auth.signUp({ email: email.trim(), password });
+      if (err) setError(err.message);
+      else if (mode === "signup") setNotice("Check your email to confirm your account, then sign in.");
+    } catch (e) {
+      setError(e.message ?? "Could not sign in.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
