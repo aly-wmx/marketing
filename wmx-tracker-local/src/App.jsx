@@ -334,6 +334,38 @@ function StatusRow({ label, status, onClick, disabled }) {
   );
 }
 
+// Same status-toggle row as StatusRow, plus a way to push this specific
+// setup task into Tickets assigned to someone — so "GBP overhaul" doesn't
+// just sit as a checkbox, it can become real, notified, assigned work.
+function SetupItemRow({ item, assignableNames, onToggleStatus, onAssign, onGoToTicket }) {
+  const Icon = item.status === "done" ? CheckCircle2 : item.status === "in_progress" ? CircleDot : Circle;
+  return (
+    <div style={{ padding: "7px 0", borderBottom: `1px solid ${C.line}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span className="wmx-body" style={{ fontSize: 13, color: C.ink }}>{item.label}</span>
+        <button onClick={onToggleStatus} className="wmx-focus wmx-icon-btn" style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer", padding: "2px 6px" }}>
+          <Icon size={15} color={STATUS_COLOR[item.status]} />
+          <span className="wmx-body" style={{ fontSize: 11.5, color: STATUS_COLOR[item.status] }}>{STATUS_LABEL[item.status]}</span>
+        </button>
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
+        {item.ticketId ? (
+          <button onClick={onGoToTicket} className="wmx-body wmx-focus wmx-icon-btn"
+            style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.brass, background: "none", border: "none", cursor: "pointer", padding: "2px 4px", fontWeight: 600, borderRadius: 6 }}>
+            <Inbox size={11} /> Assigned to {item.assignee} · view ticket
+          </button>
+        ) : (
+          <select value="" onChange={(e) => { if (e.target.value) onAssign(e.target.value); }} className="wmx-body wmx-focus"
+            style={{ fontSize: 11, color: C.sub, border: "none", background: "none", cursor: "pointer", padding: "2px 4px" }}>
+            <option value="">+ Push to Tickets…</option>
+            {assignableNames.map((n) => <option key={n} value={n}>Assign to {n}</option>)}
+          </select>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Card({ children, style, ...rest }) {
   return <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, boxShadow: "0 1px 2px rgba(20,20,15,0.04)", ...style }} {...rest}>{children}</div>;
 }
@@ -527,10 +559,23 @@ function OverviewTab({ data, portfolioPct, openTicketCount, setTab }) {
   );
 }
 
-function SetupProgress({ onboarding, setOnboarding, logActivity }) {
+function SetupProgress({ onboarding, setOnboarding, logActivity, assignableNames, userName, setTickets, onTicketAssigned, setTab }) {
+  const pushToTicket = (bizId, item, assignee) => {
+    const ticket = {
+      id: `t${Date.now()}`, biz: bizId, type: "request", title: item.label,
+      details: `Created from Setup Progress (${bizById(bizId).name}).`,
+      submitter: userName || "", status: "open", created: "Today",
+      assignee, priority: "medium", dueDate: "", comments: [],
+    };
+    setTickets((prev) => [...prev, ticket]);
+    onTicketAssigned(ticket);
+    logActivity("create", `pushed "${item.label}" to Tickets, assigned to ${assignee}`, bizId);
+    setOnboarding((prev) => ({ ...prev, [bizId]: prev[bizId].map((it) => it.id === item.id ? { ...it, ticketId: ticket.id, assignee } : it) }));
+  };
+
   return (
     <>
-      <PageHeader eyebrow="Onboarding" title="Setup Progress" />
+      <PageHeader eyebrow="Onboarding · any item can be pushed to Tickets and assigned" title="Setup Progress" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px,1fr))", gap: 16 }}>
         {BUSINESSES.map((b) => {
           const items = onboarding[b.id];
@@ -548,11 +593,15 @@ function SetupProgress({ onboarding, setOnboarding, logActivity }) {
               </div>
               <div className="wmx-body" style={{ fontSize: 11.5, color: C.sub, margin: "12px 0 4px" }}>{done}/{items.length} tasks complete</div>
               <div>{items.map((item) => (
-                <StatusRow key={item.id} label={item.label} status={item.status} onClick={() => {
-                  const next = nextStatus(item.status);
-                  setOnboarding((prev) => ({ ...prev, [b.id]: prev[b.id].map((it) => it.id === item.id ? { ...it, status: next } : it) }));
-                  logActivity("update", `marked "${item.label}" ${STATUS_LABEL[next].toLowerCase()}`, b.id);
-                }} />
+                <SetupItemRow key={item.id} item={item} assignableNames={assignableNames}
+                  onToggleStatus={() => {
+                    const next = nextStatus(item.status);
+                    setOnboarding((prev) => ({ ...prev, [b.id]: prev[b.id].map((it) => it.id === item.id ? { ...it, status: next } : it) }));
+                    logActivity("update", `marked "${item.label}" ${STATUS_LABEL[next].toLowerCase()}`, b.id);
+                  }}
+                  onAssign={(name) => pushToTicket(b.id, item, name)}
+                  onGoToTicket={() => setTab("tickets")}
+                />
               ))}</div>
             </Card>
           );
@@ -2362,7 +2411,7 @@ export default function WMXTracker() {
             </div>
           )}
           {tab === "overview" && <OverviewTab data={data} portfolioPct={portfolioPct} openTicketCount={openTicketCount} setTab={setTab} />}
-          {tab === "setup" && <SetupProgress onboarding={data.onboarding} setOnboarding={setOnboarding} logActivity={logActivity} />}
+          {tab === "setup" && <SetupProgress onboarding={data.onboarding} setOnboarding={setOnboarding} logActivity={logActivity} assignableNames={assignableNames} userName={userName} setTickets={setTickets} onTicketAssigned={notifyAssignee} setTab={setTab} />}
           {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} canEdit={isAdmin} logActivity={logActivity} />}
           {tab === "stack" && <StackTab stack={data.stack} setStack={setStack} logActivity={logActivity} />}
           {tab === "kpis" && <KpiTab kpis={data.kpis} setKpis={setKpis} />}
