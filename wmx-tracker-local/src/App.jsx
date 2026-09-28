@@ -15,7 +15,7 @@ const C = {
   card: "#FFFFFF",
   line: "#E7E1D2",
   ink: "#20242B",
-  sub: "#777064",
+  sub: "#5C564C", // ~6.5:1 against C.bg — the previous #777064 was ~3:1, failing WCAG AA at the small sizes it's used at
   navy: "#152341",
   navySoft: "#EBEEF4",
   pine: "#17332A",
