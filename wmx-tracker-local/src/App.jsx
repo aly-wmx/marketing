@@ -6,6 +6,7 @@ import {
   Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download, ShieldCheck,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
+import wmxCrest from "./assets/wmx-crest.png";
 
 /* ---------------------------------- tokens --------------------------------- */
 const C = {
@@ -1526,50 +1527,52 @@ function LoginScreen() {
   };
 
   return (
-    <div className="wmx-body" style={{ minHeight: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <div className="wmx-body" style={{ minHeight: "100%", background: C.navy, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <style>{FONTS}</style>
-      <Card style={{ padding: 28, maxWidth: 360, width: "100%" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 8, background: C.ink, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }} className="wmx-display">W</div>
-          <div>
-            <div className="wmx-display" style={{ fontSize: 15, color: C.ink, lineHeight: 1.1 }}>WMX</div>
-            <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub }}>Portfolio Control</div>
-          </div>
+      <Card style={{ padding: "36px 32px 28px", maxWidth: 380, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.35)" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 26 }}>
+          <img src={wmxCrest} alt="WMX" style={{ width: 68, height: 68, borderRadius: "50%", marginBottom: 16, boxShadow: `0 0 0 1px ${C.line}` }} />
+          <div className="wmx-display" style={{ fontSize: 21, color: C.ink, lineHeight: 1.15 }}>Welcome to WMX</div>
+          <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginTop: 4 }}>Sign in to Portfolio Control</div>
         </div>
 
         <button onClick={withGoogle} disabled={googleBusy} className="wmx-body wmx-focus"
-          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff", cursor: googleBusy ? "default" : "pointer", fontSize: 13.5, fontWeight: 600, color: C.ink }}>
+          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "11px 12px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff", cursor: googleBusy ? "default" : "pointer", fontSize: 13.5, fontWeight: 600, color: C.ink }}>
           <GoogleGlyph /> {googleBusy ? "Redirecting…" : "Continue with Google"}
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0" }}>
           <div style={{ flex: 1, height: 1, background: C.line }} />
-          <span className="wmx-body" style={{ fontSize: 11, color: C.sub }}>or</span>
+          <span className="wmx-body" style={{ fontSize: 10, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6, whiteSpace: "nowrap" }}>Or continue with email</span>
           <div style={{ flex: 1, height: 1, background: C.line }} />
         </div>
 
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {mode === "signup" && (
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name"
-              className="wmx-body wmx-focus" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+              className="wmx-body wmx-focus" style={{ padding: 10, border: `1px solid ${C.line}`, borderRadius: 8, fontSize: 13.5 }} />
           )}
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@wmx.com" autoComplete="email"
-            className="wmx-body wmx-focus" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@wmx.group" autoComplete="email"
+            className="wmx-body wmx-focus" style={{ padding: 10, border: `1px solid ${C.line}`, borderRadius: 8, fontSize: 13.5 }} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password"
             autoComplete={mode === "signin" ? "current-password" : "new-password"}
-            className="wmx-body wmx-focus" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+            className="wmx-body wmx-focus" style={{ padding: 10, border: `1px solid ${C.line}`, borderRadius: 8, fontSize: 13.5 }} />
           {error && <div className="wmx-body" style={{ fontSize: 12, color: C.warn }}>{error}</div>}
           {notice && <div className="wmx-body" style={{ fontSize: 12, color: C.good }}>{notice}</div>}
           <button type="submit" disabled={busy} className="wmx-body wmx-focus"
-            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "9px 14px", cursor: busy ? "default" : "pointer", fontWeight: 600, fontSize: 13 }}>
+            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 8, padding: "11px 14px", cursor: busy ? "default" : "pointer", fontWeight: 600, fontSize: 13.5, marginTop: 4 }}>
             {busy ? "…" : mode === "signin" ? "Sign in" : "Create account"}
           </button>
         </form>
 
         <button onClick={() => { setMode((m) => m === "signin" ? "signup" : "signin"); setError(null); setNotice(null); }} className="wmx-body wmx-focus"
-          style={{ marginTop: 12, fontSize: 12, color: C.sub, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+          style={{ display: "block", width: "100%", textAlign: "center", marginTop: 16, fontSize: 12, color: C.sub, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
           {mode === "signin" ? "New to WMX? Create an account" : "Already have an account? Sign in"}
         </button>
+
+        <div className="wmx-body" style={{ marginTop: 22, paddingTop: 16, borderTop: `1px solid ${C.line}`, textAlign: "center", fontSize: 10.5, color: C.sub }}>
+          Internal tool · access restricted to @wmx.group accounts
+        </div>
       </Card>
     </div>
   );
@@ -1919,7 +1922,7 @@ export default function WMXTracker() {
 
       <aside className="wmx-sidebar" style={{ background: C.sidebar, borderRight: `1px solid ${C.line}`, padding: "22px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 6px" }}>
-          <div style={{ width: 34, height: 34, borderRadius: 8, background: C.ink, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }} className="wmx-display">W</div>
+          <img src={wmxCrest} alt="" style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0 }} />
           <div>
             <div className="wmx-display" style={{ fontSize: 15, color: C.ink, lineHeight: 1.1 }}>WMX</div>
             <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub }}>Portfolio Control</div>

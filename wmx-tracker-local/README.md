@@ -13,6 +13,7 @@ A real, running copy of the WMX tracker with:
 - **Editable Stack and SaaS & Billing** — both are now inline-editable tables (business toggle-pills, Add/Remove row) instead of static read-only lists, synced and autosaved the same as everything else.
 - **Team filter** — a "filter by person" dropdown to see one teammate's card instead of the whole roster.
 - **Admin tab** (admin-only) — lists every real account (via `admin_set_role`/`admin_list_users`, both `security definer` Postgres functions that re-check admin status server-side) with an editable access-level dropdown per row, so any existing account's role can be changed directly, plus a way to pre-authorize an email that hasn't signed in yet.
+- **Real branding** — the actual WMX crest (`src/assets/wmx-crest.png`) replaces the placeholder "W" mark in both the sidebar and the redesigned login screen.
 
 ## 1. Create a Supabase project (free tier is fine)
 
