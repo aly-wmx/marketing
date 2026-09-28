@@ -203,7 +203,6 @@ function isValidKpis(kpis) {
   return Array.isArray(kpis) && kpis.length > 0 && kpis.every((k) => k && typeof k.biz === "string" && bizById(k.biz));
 }
 
-const KNOWN_TEAM_NAMES = ["You", "Avery", "Aly", "Brad", "Kenny", "Jeff"];
 
 /* --------------------------------- helpers --------------------------------- */
 function Pill({ children, color, bg }) {
@@ -795,8 +794,21 @@ function GoogleGlyph() {
   );
 }
 
+// Identity comes straight from the signed-in account — Google's profile name,
+// or the name given at sign-up, or (last resort) the email's local part —
+// never a separate "who's this" screen the user has to get past first.
+function deriveDisplayName(session) {
+  const meta = session?.user?.user_metadata || {};
+  if (meta.display_name) return meta.display_name.trim();
+  if (meta.full_name) return meta.full_name.trim();
+  if (meta.name) return meta.name.trim();
+  const local = (session?.user?.email || "").split("@")[0] || "";
+  return local.replace(/[._]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
 function LoginScreen() {
   const [mode, setMode] = useState("signin"); // signin | signup
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -823,6 +835,7 @@ function LoginScreen() {
   const submit = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password) return;
+    if (mode === "signup" && !name.trim()) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -833,7 +846,7 @@ function LoginScreen() {
       // is ever sent.
       const { error: err } = mode === "signin"
         ? await supabase.auth.signInWithPassword({ email: email.trim(), password })
-        : await supabase.auth.signUp({ email: email.trim(), password });
+        : await supabase.auth.signUp({ email: email.trim(), password, options: { data: { display_name: name.trim() } } });
       if (err) setError(err.message);
       else if (mode === "signup") setNotice("Check your email to confirm your account, then sign in.");
     } catch (e) {
@@ -867,6 +880,10 @@ function LoginScreen() {
         </div>
 
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {mode === "signup" && (
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name"
+              className="wmx-body wmx-focus" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+          )}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@wmx.com" autoComplete="email"
             className="wmx-body wmx-focus" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password"
@@ -889,33 +906,69 @@ function LoginScreen() {
   );
 }
 
-function NamePrompt({ onChoose }) {
+function NamePrompt({ current, onChoose, onCancel }) {
   const [draft, setDraft] = useState("");
   return (
-    <div className="wmx-body" style={{ minHeight: "100%", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <style>{FONTS}</style>
+    <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.35)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}>
       <Card style={{ padding: 28, maxWidth: 360, width: "100%" }}>
-        <div className="wmx-display" style={{ fontSize: 18, color: C.ink, marginBottom: 6 }}>What should we call you?</div>
+        <div className="wmx-display" style={{ fontSize: 18, color: C.ink, marginBottom: 6 }}>Change your display name</div>
         <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
-          Labels your changes for the team (e.g. "Aly updated 2 min ago") and lets teammates assign you tickets.
-        </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-          {KNOWN_TEAM_NAMES.map((n) => (
-            <button key={n} onClick={() => onChoose(n)} className="wmx-body wmx-focus"
-              style={{ fontSize: 12, padding: "6px 12px", borderRadius: 999, border: `1px solid ${C.line}`, background: "transparent", cursor: "pointer" }}>
-              {n}
-            </button>
-          ))}
+          Labels your changes for the team (e.g. "Aly updated 2 min ago") and lets teammates assign you tickets. Currently: <b>{current}</b>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Or type your name"
-            onKeyDown={(e) => e.key === "Enter" && onChoose(draft)}
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="New name"
+            onKeyDown={(e) => e.key === "Enter" && draft.trim() && onChoose(draft)}
+            autoFocus
             className="wmx-body wmx-focus" style={{ flex: 1, padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
-          <button onClick={() => onChoose(draft)} className="wmx-body wmx-focus"
-            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontWeight: 600 }}>
-            Continue
+          <button onClick={() => onChoose(draft)} disabled={!draft.trim()} className="wmx-body wmx-focus"
+            style={{ background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: draft.trim() ? "pointer" : "default", fontWeight: 600 }}>
+            Save
           </button>
         </div>
+        <button onClick={onCancel} className="wmx-body wmx-focus"
+          style={{ marginTop: 12, fontSize: 12, color: C.sub, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+          Cancel
+        </button>
+      </Card>
+    </div>
+  );
+}
+
+function OnboardingTour({ onDismiss }) {
+  const steps = [
+    { icon: ListChecks, title: "Setup Progress", body: "Track onboarding for each business — updates sync live to the whole team as soon as anyone makes them." },
+    { icon: BarChart3, title: "KPIs", body: "Four tabs, one per business — Watermark Design Build, Twofold Coffee & Kitchen, Manolo Roofing, Garrison House." },
+    { icon: Share2, title: "Social Media Hub", body: "Log weekly follower counts per platform and see the week-over-week change." },
+    { icon: Inbox, title: "Tickets", body: "Assign a ticket to a teammate and they get a live notification, even if they're on a different tab." },
+    { icon: Save, title: "Autosave", body: "Changes save automatically a couple seconds after you stop — no need to remember to hit Save." },
+  ];
+  return (
+    <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}>
+      <Card style={{ padding: 28, maxWidth: 440, width: "100%" }}>
+        <div className="wmx-display" style={{ fontSize: 20, color: C.ink, marginBottom: 4 }}>Welcome to WMX Portfolio Control</div>
+        <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 18 }}>
+          A quick look at how this works before you dive in.
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 20 }}>
+          {steps.map((s) => {
+            const Icon = s.icon;
+            return (
+              <div key={s.title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: C.brassSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon size={15} color={C.brass} />
+                </div>
+                <div>
+                  <div className="wmx-display" style={{ fontSize: 13, color: C.ink }}>{s.title}</div>
+                  <div className="wmx-body" style={{ fontSize: 12, color: C.sub, marginTop: 1 }}>{s.body}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={onDismiss} className="wmx-body wmx-focus"
+          style={{ width: "100%", background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "10px 14px", cursor: "pointer", fontWeight: 600, fontSize: 13.5 }}>
+          Got it — let's go
+        </button>
       </Card>
     </div>
   );
@@ -932,6 +985,7 @@ export default function WMXTracker() {
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  const [showTour, setShowTour] = useState(false);
   const [remoteBanner, setRemoteBanner] = useState(null); // { by, at } when a remote save lands while dirty
   const [toasts, setToasts] = useState([]); // in-app "you were assigned a ticket" banners
   const [unreadCount, setUnreadCount] = useState(0);
@@ -950,7 +1004,30 @@ export default function WMXTracker() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const userName = session?.user?.user_metadata?.display_name || "";
+  // first-ever login for this account: show a one-time walkthrough. Tracked
+  // on the account itself (not localStorage) so it follows them across
+  // devices and only ever shows once, the same way the display name does.
+  useEffect(() => {
+    if (session && !session.user.user_metadata?.has_onboarded) setShowTour(true);
+  }, [session]);
+
+  const dismissTour = () => {
+    setShowTour(false);
+    supabase.auth.updateUser({ data: { has_onboarded: true } });
+  };
+
+  const userName = useMemo(() => deriveDisplayName(session), [session]);
+
+  // First time we see an account with no display_name saved yet (a fresh
+  // Google sign-in, or an old account from before sign-up asked for a name),
+  // persist the derived one so it's stable from here on — no separate
+  // "who's this" screen the user has to get past first.
+  useEffect(() => {
+    if (!session) return;
+    if (!session.user.user_metadata?.display_name && userName) {
+      supabase.auth.updateUser({ data: { display_name: userName } });
+    }
+  }, [session, userName]);
 
   const chooseName = async (name) => {
     const clean = name.trim();
@@ -1047,10 +1124,14 @@ export default function WMXTracker() {
           const incoming = payload.new;
           if (!incoming || incoming.updated_by === userName) return; // ignore our own save echoing back
           setLastEditedBy({ by: incoming.updated_by, at: incoming.updated_at });
+          const incomingOnboarding = isValidOnboarding(incoming.data?.onboarding) ? incoming.data.onboarding : null;
           if (dirtyRef.current) {
-            // don't silently overwrite unsaved local changes — let the user decide
+            // don't silently overwrite unsaved local edits elsewhere — let the
+            // user decide. Setup Progress is a shared checklist, not a
+            // freeform field, so it stays live for everyone regardless.
+            if (incomingOnboarding) setData((prev) => ({ ...prev, onboarding: incomingOnboarding }));
             setRemoteBanner({ by: incoming.updated_by, at: incoming.updated_at });
-          } else if (isValidOnboarding(incoming.data?.onboarding)) {
+          } else if (incomingOnboarding) {
             setData((prev) => ({
               ...prev,
               ...incoming.data,
@@ -1148,9 +1229,6 @@ export default function WMXTracker() {
   }
   if (!session) {
     return <LoginScreen />;
-  }
-  if (!userName || editingName) {
-    return <NamePrompt onChoose={chooseName} />;
   }
 
   return (
@@ -1318,6 +1396,9 @@ export default function WMXTracker() {
           </Card>
         ))}
       </div>
+
+      {editingName && <NamePrompt current={userName} onChoose={chooseName} onCancel={() => setEditingName(false)} />}
+      {showTour && !editingName && <OnboardingTour onDismiss={dismissTour} />}
     </div>
   );
 }
