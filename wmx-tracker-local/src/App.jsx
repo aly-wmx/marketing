@@ -128,7 +128,7 @@ const initTeam = () => [
     tasks: [{ t: "Q3 creative refresh", s: "not_started" }] },
 ];
 
-const STACK = [
+const initStack = () => [
   { id: "ghl", name: "GoHighLevel", manager: "Aly", purpose: "CRM / ads / email / SMS", biz: ["wm", "mn", "gh", "tf"], status: "active" },
   { id: "callrail", name: "CallRail / WhatConverts", manager: "You", purpose: "Keyword-level call tracking (DNI)", biz: ["mn"], status: "future — gated to Manolo Search launch" },
   { id: "localfalcon", name: "Local Falcon", manager: "You", purpose: "Map-pack geo-grid rank tracking", biz: ["wm", "mn", "gh", "tf"], status: "active" },
@@ -184,7 +184,7 @@ function seedKpis() {
   return rows;
 }
 
-const SAAS = [
+const initSaas = () => [
   { id: "ghl", tool: "GoHighLevel", cost: 297, biz: ["wm", "mn", "gh", "tf"], notes: "active" },
   { id: "callrail", tool: "CallRail / WhatConverts", cost: 50, biz: ["mn"], notes: "future — gated to Manolo Search launch" },
   { id: "localfalcon", tool: "Local Falcon", cost: 40, biz: ["wm", "mn", "gh", "tf"], notes: "active" },
@@ -209,6 +209,8 @@ function seedState() {
     onboarding: initOnboarding(),
     team: initTeam(),
     kpis: seedKpis(),
+    stack: initStack(),
+    saas: initSaas(),
     tickets: initTickets(),
   };
 }
@@ -272,6 +274,22 @@ function Card({ children, style, ...rest }) {
   return <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, boxShadow: "0 1px 2px rgba(20,20,15,0.04)", ...style }} {...rest}>{children}</div>;
 }
 
+function BizTogglePills({ selected, onToggle }) {
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      {BUSINESSES.map((b) => {
+        const active = selected.includes(b.id);
+        return (
+          <button key={b.id} onClick={() => onToggle(b.id)} className="wmx-focus" type="button"
+            style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 999, border: `1px solid ${active ? b.color : C.line}`, background: active ? b.soft : "transparent", color: active ? b.color : C.sub, cursor: "pointer" }}>
+            {b.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function FormField({ label, children, span }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: span ? `span ${span}` : undefined }}>
@@ -331,17 +349,25 @@ function SetupProgress({ onboarding, setOnboarding, logActivity }) {
 }
 
 function TeamTab({ team, setTeam, canEdit, logActivity }) {
+  const [filterPerson, setFilterPerson] = useState("all");
   const toggleTask = (memberId, idx) => {
     const member = team.find((m) => m.id === memberId);
     const next = nextStatus(member.tasks[idx].s);
     setTeam((prev) => prev.map((m) => m.id !== memberId ? m : { ...m, tasks: m.tasks.map((t, i) => i === idx ? { ...t, s: next } : t) }));
     logActivity("update", `marked "${member.tasks[idx].t}" ${STATUS_LABEL[next].toLowerCase()} for ${member.name}`);
   };
+  const visible = filterPerson === "all" ? team : team.filter((m) => m.id === filterPerson);
   return (
     <>
-      <PageHeader eyebrow={canEdit ? "Who's doing what" : "Who's doing what · admins only can edit"} title="Team" />
+      <PageHeader eyebrow={canEdit ? "Who's doing what" : "Who's doing what · admins only can edit"} title="Team" right={
+        <select value={filterPerson} onChange={(e) => setFilterPerson(e.target.value)} className="wmx-body"
+          style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12.5 }}>
+          <option value="all">Everyone</option>
+          {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+      } />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 16 }}>
-        {team.map((m) => {
+        {visible.map((m) => {
           const primaryColor = m.vendor ? C.brass : bizById(m.biz[0]).color;
           return (
             <Card key={m.id} style={{ padding: 18 }}>
@@ -367,25 +393,52 @@ function TeamTab({ team, setTeam, canEdit, logActivity }) {
   );
 }
 
-function StackTab({ stack }) {
+const cellInput = { width: "100%", border: "none", background: "transparent", fontSize: 13, padding: "4px 2px", color: C.ink };
+
+function StackTab({ stack, setStack, logActivity }) {
+  const update = (id, field, val) => setStack((prev) => prev.map((s) => s.id === id ? { ...s, [field]: val } : s));
+  const toggleBiz = (id, bizId) => setStack((prev) => prev.map((s) => s.id !== id ? s : {
+    ...s, biz: s.biz.includes(bizId) ? s.biz.filter((x) => x !== bizId) : [...s.biz, bizId],
+  }));
+  const addRow = () => {
+    setStack((prev) => [...prev, { id: `stack${Date.now()}`, name: "", manager: "", purpose: "", biz: [], status: "active" }]);
+    logActivity("create", "added a new tool to the Stack");
+  };
+  const removeRow = (id) => {
+    const row = stack.find((s) => s.id === id);
+    setStack((prev) => prev.filter((s) => s.id !== id));
+    logActivity("delete", `removed "${row?.name || "a tool"}" from the Stack`);
+  };
+
   return (
     <>
-      <PageHeader eyebrow="Tools in play" title="Stack" />
+      <PageHeader eyebrow="Tools in play" title="Stack" right={
+        <button onClick={addRow} className="wmx-body wmx-focus"
+          style={{ display: "flex", alignItems: "center", gap: 6, background: C.ink, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600 }}>
+          <Plus size={15} /> Add tool
+        </button>
+      } />
       <Card style={{ padding: 6, overflowX: "auto" }}>
         <table className="wmx-body" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: "left", color: C.sub, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 }}>
-              <th style={{ padding: "12px 14px" }}>Tool</th><th>Manager</th><th>Purpose</th><th>Businesses</th><th>Status</th>
+              <th style={{ padding: "12px 14px" }}>Tool</th><th>Manager</th><th>Purpose</th><th>Businesses</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
             {stack.map((s) => (
-              <tr key={s.id} style={{ borderTop: `1px solid ${C.line}` }} onMouseEnter={(e) => e.currentTarget.style.background = C.bg} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                <td style={{ padding: "12px 14px", fontWeight: 600, color: C.ink }}>{s.name}</td>
-                <td style={{ color: C.ink }}>{s.manager}</td>
-                <td style={{ color: C.sub }}>{s.purpose}</td>
-                <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{s.biz.map((id) => { const b = bizById(id); return <Pill key={id} color={b.color} bg={b.soft}>{b.name}</Pill>; })}</div></td>
-                <td style={{ color: s.status.startsWith("needs") ? C.warn : C.sub, fontStyle: s.status.startsWith("future") ? "italic" : "normal" }}>{s.status}</td>
+              <tr key={s.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                <td style={{ padding: "8px 14px" }}><input value={s.name} onChange={(e) => update(s.id, "name", e.target.value)} placeholder="Tool name" className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} /></td>
+                <td><input value={s.manager} onChange={(e) => update(s.id, "manager", e.target.value)} placeholder="—" className="wmx-focus" style={cellInput} /></td>
+                <td><input value={s.purpose} onChange={(e) => update(s.id, "purpose", e.target.value)} placeholder="—" className="wmx-focus" style={{ ...cellInput, color: C.sub }} /></td>
+                <td><BizTogglePills selected={s.biz} onToggle={(bizId) => toggleBiz(s.id, bizId)} /></td>
+                <td><input value={s.status} onChange={(e) => update(s.id, "status", e.target.value)} placeholder="—"
+                  className="wmx-focus" style={{ ...cellInput, color: s.status.startsWith("needs") ? C.warn : C.sub, fontStyle: s.status.startsWith("future") ? "italic" : "normal" }} /></td>
+                <td>
+                  <button onClick={() => removeRow(s.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                    <Trash2 size={13} color={C.sub} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -477,30 +530,61 @@ function KpiTab({ kpis, setKpis }) {
   );
 }
 
-function SaasTab({ saas }) {
-  const total = saas.reduce((sum, s) => sum + s.cost, 0);
+function SaasTab({ saas, setSaas, logActivity }) {
+  const total = saas.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+  const update = (id, field, val) => setSaas((prev) => prev.map((s) => s.id === id ? { ...s, [field]: val } : s));
+  const toggleBiz = (id, bizId) => setSaas((prev) => prev.map((s) => s.id !== id ? s : {
+    ...s, biz: s.biz.includes(bizId) ? s.biz.filter((x) => x !== bizId) : [...s.biz, bizId],
+  }));
+  const addRow = () => {
+    setSaas((prev) => [...prev, { id: `saas${Date.now()}`, tool: "", cost: 0, biz: [], notes: "" }]);
+    logActivity("create", "added a new tool to SaaS & Billing");
+  };
+  const removeRow = (id) => {
+    const row = saas.find((s) => s.id === id);
+    setSaas((prev) => prev.filter((s) => s.id !== id));
+    logActivity("delete", `removed "${row?.tool || "a tool"}" from SaaS & Billing`);
+  };
+
   return (
     <>
       <PageHeader eyebrow="Monthly spend" title="SaaS & Billing" right={
-        <Card style={{ padding: "10px 18px" }}>
-          <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6 }}>Total / month</div>
-          <div className="wmx-display" style={{ fontSize: 22, color: C.brass }}>${total.toLocaleString()}</div>
-        </Card>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={addRow} className="wmx-body wmx-focus"
+            style={{ display: "flex", alignItems: "center", gap: 6, background: C.ink, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600 }}>
+            <Plus size={15} /> Add tool
+          </button>
+          <Card style={{ padding: "10px 18px" }}>
+            <div className="wmx-body" style={{ fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 0.6 }}>Total / month</div>
+            <div className="wmx-display" style={{ fontSize: 22, color: C.brass }}>${total.toLocaleString()}</div>
+          </Card>
+        </div>
       } />
       <Card style={{ padding: 6, overflowX: "auto" }}>
         <table className="wmx-body" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: "left", color: C.sub, fontSize: 11, textTransform: "uppercase" }}>
-              <th style={{ padding: "12px 14px" }}>Tool</th><th>$ / month</th><th>Businesses</th><th>Notes</th>
+              <th style={{ padding: "12px 14px" }}>Tool</th><th>$ / month</th><th>Businesses</th><th>Notes</th><th></th>
             </tr>
           </thead>
           <tbody>
             {saas.map((s) => (
               <tr key={s.id} style={{ borderTop: `1px solid ${C.line}` }}>
-                <td style={{ padding: "12px 14px", fontWeight: 600, color: C.ink }}>{s.tool}</td>
-                <td className="wmx-body" style={{ color: C.ink, fontVariantNumeric: "tabular-nums" }}>${s.cost}</td>
-                <td><div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{s.biz.map((id) => { const b = bizById(id); return <Pill key={id} color={b.color} bg={b.soft}>{b.name}</Pill>; })}</div></td>
-                <td style={{ color: s.id === "mysterypixel" ? C.warn : C.sub }}>{s.notes}</td>
+                <td style={{ padding: "8px 14px" }}><input value={s.tool} onChange={(e) => update(s.id, "tool", e.target.value)} placeholder="Tool name" className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} /></td>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    $<input type="number" min="0" value={s.cost} onChange={(e) => update(s.id, "cost", e.target.value === "" ? 0 : Number(e.target.value))}
+                      className="wmx-focus" style={{ ...cellInput, width: 70, fontVariantNumeric: "tabular-nums" }} />
+                  </div>
+                </td>
+                <td><BizTogglePills selected={s.biz} onToggle={(bizId) => toggleBiz(s.id, bizId)} /></td>
+                <td><input value={s.notes} onChange={(e) => update(s.id, "notes", e.target.value)} placeholder="—"
+                  className="wmx-focus" style={{ ...cellInput, color: s.notes?.toLowerCase().includes("confirm") ? C.warn : C.sub }} /></td>
+                <td>
+                  <button onClick={() => removeRow(s.id)} className="wmx-focus" style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                    <Trash2 size={13} color={C.sub} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1570,6 +1654,16 @@ export default function WMXTracker() {
     markDirty();
   }, [markDirty]);
 
+  const setStack = useCallback((updater) => {
+    setData((prev) => ({ ...prev, stack: typeof updater === "function" ? updater(prev.stack) : updater }));
+    markDirty();
+  }, [markDirty]);
+
+  const setSaas = useCallback((updater) => {
+    setData((prev) => ({ ...prev, saas: typeof updater === "function" ? updater(prev.saas) : updater }));
+    markDirty();
+  }, [markDirty]);
+
   const setTickets = useCallback((updater) => {
     setData((prev) => ({ ...prev, tickets: typeof updater === "function" ? updater(prev.tickets) : updater }));
     markDirty();
@@ -1767,10 +1861,10 @@ export default function WMXTracker() {
           )}
           {tab === "setup" && <SetupProgress onboarding={data.onboarding} setOnboarding={setOnboarding} logActivity={logActivity} />}
           {tab === "team" && <TeamTab team={data.team} setTeam={setTeam} canEdit={isAdmin} logActivity={logActivity} />}
-          {tab === "stack" && <StackTab stack={STACK} />}
+          {tab === "stack" && <StackTab stack={data.stack} setStack={setStack} logActivity={logActivity} />}
           {tab === "kpis" && <KpiTab kpis={data.kpis} setKpis={setKpis} />}
           {tab === "social" && <SocialTab logActivity={logActivity} />}
-          {tab === "saas" && <SaasTab saas={SAAS} />}
+          {tab === "saas" && <SaasTab saas={data.saas} setSaas={setSaas} logActivity={logActivity} />}
           {tab === "accounts" && isAdmin && <AccountsTab />}
           {tab === "tickets" && <TicketsTab tickets={data.tickets} setTickets={setTickets} assignableNames={assignableNames} userName={userName} onTicketAssigned={notifyAssignee} canDelete={isAdmin} logActivity={logActivity} />}
           {tab === "activity" && <ActivityTab />}
