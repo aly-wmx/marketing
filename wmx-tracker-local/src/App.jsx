@@ -3,7 +3,7 @@ import {
   ListChecks, Users, Layers, BarChart3, CreditCard, KeyRound, Inbox,
   CheckCircle2, Circle, CircleDot, Eye, EyeOff, Mail, Plus, Trash2,
   ChevronDown, ChevronUp, AlertTriangle, ChevronRight, Save, Check, Loader2, Bell, X,
-  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download, ShieldCheck, LayoutDashboard, Menu,
+  Share2, TrendingUp, TrendingDown, LogOut, Pencil, Activity as ActivityIcon, Download, Upload, ShieldCheck, LayoutDashboard, Menu,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 import wmxCrest from "./assets/wmx-crest.png";
@@ -110,6 +110,32 @@ const downloadCsv = (filename, csv) => {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
+
+// Inverse of toCsv/csvEscape — a small state-machine parser so quoted fields
+// (commas, quotes, newlines inside a cell) round-trip correctly, since a
+// naive split(",")/split("\n") would break on exactly the fields csvEscape
+// quotes for that reason.
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else if (c !== "\r") field += c;
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+function csvRowsToObjects(rows) {
+  if (rows.length === 0) return [];
+  const headers = rows[0].map((h) => h.trim());
+  return rows.slice(1).filter((r) => r.some((cell) => cell.trim() !== "")).map((r) => Object.fromEntries(headers.map((h, i) => [h, (r[i] ?? "").trim()])));
+}
 
 /* -------------------------------- seed data -------------------------------- */
 const BUSINESSES = [
@@ -1204,6 +1230,8 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   const [editForm, setEditForm] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteText, setDeleteText] = useState("");
+  const [importMsg, setImportMsg] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1327,10 +1355,61 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     return 0;
   });
 
+  const TICKET_CSV_HEADERS = ["ID", "Title", "Business", "Type", "Priority", "Status", "Assignee", "Due Date", "Submitter", "Details"];
+  const exportCsv = () => {
+    const rows = filtered.map((t) => [t.id, t.title, bizById(t.biz).name, t.type, t.priority || "medium", t.status, t.assignee || "", t.dueDate || "", t.submitter || "", t.details || ""]);
+    downloadCsv(`wmx-tickets-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(TICKET_CSV_HEADERS, rows));
+  };
+
+  const triggerImport = () => fileInputRef.current?.click();
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset so picking the same file again still fires onChange
+    if (!file) return;
+    const text = await file.text();
+    const rows = csvRowsToObjects(parseCsv(text)).filter((r) => (r.Title || "").trim());
+    if (rows.length === 0) { setImportMsg({ text: "No rows found in that file (a Title column with at least one row is required).", ok: false }); setTimeout(() => setImportMsg(null), 5000); return; }
+
+    const existingIds = new Set(tickets.map((t) => t.id));
+    let created = 0, updated = 0;
+    const patches = rows.map((row, i) => {
+      const bizMatch = BUSINESSES.find((b) => b.name.toLowerCase() === (row.Business || "").toLowerCase() || b.id === (row.Business || "").toLowerCase());
+      const type = TICKET_TYPES.includes((row.Type || "").toLowerCase()) ? row.Type.toLowerCase() : "request";
+      const priority = ["high", "medium", "low"].includes((row.Priority || "").toLowerCase()) ? row.Priority.toLowerCase() : "medium";
+      const status = ["open", "in_progress", "resolved"].includes((row.Status || "").toLowerCase().replace(/\s+/g, "_")) ? row.Status.toLowerCase().replace(/\s+/g, "_") : "open";
+      const existing = row.ID && existingIds.has(row.ID);
+      if (existing) updated++; else created++;
+      return {
+        id: existing ? row.ID : `t${Date.now()}_${i}`,
+        isNew: !existing,
+        biz: bizMatch ? bizMatch.id : "wm",
+        type, priority, status,
+        title: row.Title, assignee: row.Assignee || "", dueDate: row["Due Date"] || "", submitter: row.Submitter || "", details: row.Details || "",
+      };
+    });
+
+    setTickets((prev) => {
+      const stamp = { updatedAt: new Date().toISOString(), updatedBy: userName || "Unknown" };
+      const next = [...prev];
+      patches.forEach(({ isNew, ...p }) => {
+        if (isNew) {
+          next.push({ ...p, comments: [], created: "Today", ...stamp });
+        } else {
+          const idx = next.findIndex((t) => t.id === p.id);
+          if (idx >= 0) next[idx] = { ...next[idx], ...p, ...stamp };
+        }
+      });
+      return next;
+    });
+    logActivity("create", `imported ${patches.length} ticket row(s) from CSV (${created} new, ${updated} updated)`);
+    setImportMsg({ text: `Imported ${created} new, updated ${updated}.`, ok: true });
+    setTimeout(() => setImportMsg(null), 5000);
+  };
+
   return (
     <>
       <PageHeader eyebrow="Shared board · visible to everyone with this link" title="Tickets" right={
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
             {[["board", "Board"], ["table", "Table"]].map(([v, label]) => (
               <button key={v} onClick={() => setView(v)} className="wmx-body wmx-focus"
@@ -1339,12 +1418,31 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
               </button>
             ))}
           </div>
+          <button onClick={exportCsv} title="Export the currently filtered tickets as CSV" className="wmx-body wmx-focus"
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "none", color: C.ink, border: `1px solid ${C.line}`, borderRadius: 8, cursor: "pointer", fontSize: 12.5, padding: "8px 14px", fontWeight: 600 }}>
+            <Download size={14} /> Export
+          </button>
+          <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleImportFile} style={{ display: "none" }} />
+          <button onClick={triggerImport} title="Import tickets from a CSV file (matching by ID updates existing tickets)" className="wmx-body wmx-focus"
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "none", color: C.ink, border: `1px solid ${C.line}`, borderRadius: 8, cursor: "pointer", fontSize: 12.5, padding: "8px 14px", fontWeight: 600 }}>
+            <Upload size={14} /> Import
+          </button>
           <button onClick={() => setShowForm((s) => !s)} className="wmx-body wmx-focus"
             style={{ display: "flex", alignItems: "center", gap: 6, background: C.ink, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600 }}>
             <Plus size={15} /> New ticket
           </button>
         </div>
       } />
+
+      {importMsg && (
+        <div className="wmx-body" style={{
+          fontSize: 12.5, color: importMsg.ok ? C.good : C.warn,
+          background: `${importMsg.ok ? C.good : C.warn}15`, border: `1px solid ${importMsg.ok ? C.good : C.warn}40`,
+          borderRadius: 8, padding: "8px 14px", marginBottom: 12,
+        }}>
+          {importMsg.text}
+        </div>
+      )}
 
       {showForm && (
         <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}
