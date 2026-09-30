@@ -53,7 +53,7 @@ const FONTS = `
 .wmx-saas-cols{grid-template-columns:2fr 0.8fr 1.6fr 2fr 32px;}
 .wmx-kpi-cols{grid-template-columns:2fr 0.9fr 0.9fr 0.9fr 1fr 1.4fr;}
 .wmx-social-cols{grid-template-columns:1.3fr 1fr 0.9fr 0.7fr 0.9fr 0.7fr;}
-.wmx-tickets-cols{grid-template-columns:1.8fr 1fr 0.9fr 0.9fr 1fr 1fr 0.9fr 1fr 0.7fr 56px;}
+.wmx-tickets-cols{grid-template-columns:1.6fr 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr 0.9fr 0.9fr 1fr 0.6fr 56px;}
 .wmx-mobile-topbar{display:none;}
 .wmx-mobile-backdrop{display:none;}
 @media (max-width: 860px){
@@ -1091,18 +1091,25 @@ function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, con
 
 const TICKET_TYPES = ["campaign", "content", "request", "question", "idea", "issue"];
 
+const wrapCell = { wordBreak: "break-word", overflowWrap: "break-word", whiteSpace: "normal" };
+
+function formatTimestamp(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 // Table-view counterpart to TicketCard: same data, same actions (status,
-// assignee, comments, email, delete), but every field is an inline
-// input/select instead of a static line — a dense list for scanning/sorting
-// a lot of tickets at once instead of the board's one-glance-per-card view.
-function TicketTableRow({ t, assignableNames, canDelete, userName, contacts, statusMeta, onUpdate, onReassign, onStatus, onRemove, onAddComment }) {
+// assignee, comments, delete), but a read-only wrapped-text row instead of
+// inputs/selects crammed into fixed-width cells — a dense list for
+// scanning/sorting a lot of tickets, with all editing funneled through the
+// Edit action so every field, including status, lives in one place.
+function TicketTableRow({ t, statusMeta, canDelete, onEdit, onDeleteRequest, onAddComment, userName }) {
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState("");
   const b = bizById(t.biz);
   const overdue = !!t.dueDate && t.status !== "resolved" && t.dueDate < new Date().toISOString().slice(0, 10);
   const comments = t.comments || [];
-  const assigneeEmail = t.assignee ? contacts[t.assignee] : null;
-  const mailto = `mailto:${assigneeEmail || "ops@wmx.com"}?subject=${encodeURIComponent(`[${t.type}] ${t.title}`)}&body=${encodeURIComponent(`${t.details}\n\n— ${t.submitter || "Unknown"} (${b.name})`)}`;
+  const status = statusMeta[t.status];
 
   const submitComment = () => {
     if (!draft.trim()) return;
@@ -1113,43 +1120,32 @@ function TicketTableRow({ t, assignableNames, canDelete, userName, contacts, sta
   return (
     <>
       <div className="wmx-rtable-row wmx-tickets-cols">
-        <div><span className="wmx-rtable-label">Title</span>
-          <input value={t.title} onChange={(e) => onUpdate(t.id, "title", e.target.value)} className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} />
+        <div style={wrapCell}><span className="wmx-rtable-label">Title</span>
+          <span style={{ fontWeight: 600, color: C.ink }}>{t.title}</span>
         </div>
-        <div><span className="wmx-rtable-label">Business</span>
-          <select value={t.biz} onChange={(e) => onUpdate(t.id, "biz", e.target.value)} className="wmx-body wmx-focus" style={selectCell}>
-            {BUSINESSES.map((biz) => <option key={biz.id} value={biz.id}>{biz.name}</option>)}
-          </select>
+        <div style={wrapCell}><span className="wmx-rtable-label">Business</span>
+          <Pill color={b.color} bg={b.soft}>{b.name}</Pill>
         </div>
-        <div><span className="wmx-rtable-label">Type</span>
-          <select value={t.type} onChange={(e) => onUpdate(t.id, "type", e.target.value)} className="wmx-body wmx-focus" style={selectCell}>
-            {TICKET_TYPES.map((ty) => <option key={ty} value={ty}>{ty[0].toUpperCase() + ty.slice(1)}</option>)}
-          </select>
+        <div style={wrapCell}><span className="wmx-rtable-label">Type</span>
+          <span style={{ color: C.sub }}>{t.type}</span>
         </div>
-        <div><span className="wmx-rtable-label">Priority</span>
-          <select value={t.priority || "medium"} onChange={(e) => onUpdate(t.id, "priority", e.target.value)} className="wmx-body wmx-focus"
-            style={{ ...selectCell, color: PRIORITY_COLOR[t.priority] || C.brass, fontWeight: 600 }}>
-            {["high", "medium", "low"].map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
-          </select>
+        <div style={wrapCell}><span className="wmx-rtable-label">Priority</span>
+          <Pill color={PRIORITY_COLOR[t.priority] || C.brass} bg={C.bg}>{PRIORITY_LABEL[t.priority] || "Medium"}</Pill>
         </div>
-        <div><span className="wmx-rtable-label">Status</span>
-          <select value={t.status} onChange={(e) => onStatus(t.id, e.target.value)} className="wmx-body wmx-focus"
-            style={{ ...selectCell, color: statusMeta[t.status]?.accent || C.ink, fontWeight: 600 }}>
-            {Object.values(statusMeta).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
+        <div style={wrapCell}><span className="wmx-rtable-label">Status</span>
+          {status && <Pill color={status.accent} bg={`${status.accent}22`}>{status.label}</Pill>}
         </div>
-        <div><span className="wmx-rtable-label">Assignee</span>
-          <select value={t.assignee || ""} onChange={(e) => onReassign(t.id, e.target.value)} className="wmx-body wmx-focus" style={selectCell}>
-            <option value="">Unassigned</option>
-            {assignableNames.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+        <div style={wrapCell}><span className="wmx-rtable-label">Assignee</span>
+          <span style={{ color: t.assignee ? C.ink : C.sub }}>{t.assignee || "Unassigned"}</span>
         </div>
-        <div><span className="wmx-rtable-label">Due</span>
-          <input type="date" value={t.dueDate || ""} onChange={(e) => onUpdate(t.id, "dueDate", e.target.value)} className="wmx-focus"
-            style={{ ...cellInput, color: overdue ? C.warn : C.ink, fontWeight: overdue ? 700 : 400 }} />
+        <div style={wrapCell}><span className="wmx-rtable-label">Due</span>
+          <span style={{ color: overdue ? C.warn : C.ink, fontWeight: overdue ? 700 : 400 }}>{t.dueDate ? `${t.dueDate}${overdue ? " (overdue)" : ""}` : "—"}</span>
         </div>
-        <div><span className="wmx-rtable-label">Submitter</span>
-          <input value={t.submitter || ""} onChange={(e) => onUpdate(t.id, "submitter", e.target.value)} placeholder="—" className="wmx-focus" style={cellInput} />
+        <div style={wrapCell}><span className="wmx-rtable-label">Submitter</span>
+          <span style={{ color: C.sub }}>{t.submitter || "—"}</span>
+        </div>
+        <div style={wrapCell}><span className="wmx-rtable-label">Updated</span>
+          <span title={t.updatedBy ? `By ${t.updatedBy}` : undefined} style={{ color: C.sub, fontSize: 11.5 }}>{formatTimestamp(t.updatedAt)}</span>
         </div>
         <div><span className="wmx-rtable-label">Comments</span>
           <button onClick={() => setExpanded((s) => !s)} aria-label={`${comments.length} comments — toggle`} className="wmx-body wmx-focus wmx-icon-btn"
@@ -1158,12 +1154,12 @@ function TicketTableRow({ t, assignableNames, canDelete, userName, contacts, sta
           </button>
         </div>
         <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-          <a href={mailto} aria-label={`Email ${t.assignee || "ops"}`} title={`Email ${t.assignee || "ops"}`}
-            className="wmx-focus wmx-icon-btn" style={{ display: "flex", padding: 4, color: C.brass }}>
-            <Mail size={13} />
-          </a>
+          <button onClick={() => onEdit(t)} aria-label={`Edit ticket "${t.title}"`} title="Edit ticket"
+            className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
+            <Pencil size={13} color={C.sub} />
+          </button>
           {canDelete && (
-            <button onClick={() => onRemove(t.id)} aria-label={`Delete ticket "${t.title}"`} title="Delete ticket"
+            <button onClick={() => onDeleteRequest(t)} aria-label={`Delete ticket "${t.title}"`} title="Delete ticket"
               className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
               <Trash2 size={13} color={C.sub} />
             </button>
@@ -1204,6 +1200,10 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   const [view, setView] = useState("board");
   const [sortKey, setSortKey] = useState("priority");
   const [sortDir, setSortDir] = useState("asc");
+  const [editingTicket, setEditingTicket] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteText, setDeleteText] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -1213,9 +1213,13 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     return () => { cancelled = true; };
   }, []);
 
+  // Stamped onto every mutation below so "last updated" in the table view
+  // reflects any change to a ticket, not just edits made through the modal.
+  const touch = () => ({ updatedAt: new Date().toISOString(), updatedBy: userName || "Unknown" });
+
   const addTicket = () => {
     if (!form.title.trim()) return;
-    const ticket = { ...form, id: `t${Date.now()}`, status: "open", created: "Today", comments: [] };
+    const ticket = { ...form, id: `t${Date.now()}`, status: "open", created: "Today", comments: [], ...touch() };
     setTickets((prev) => [...prev, ticket]);
     if (ticket.assignee) onTicketAssigned(ticket);
     logActivity("create", `opened ticket "${ticket.title}"`, ticket.biz);
@@ -1225,7 +1229,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   const setStatus = (id, status) => {
     const ticket = tickets.find((t) => t.id === id);
     if (!ticket || ticket.status === status) return;
-    setTickets((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
+    setTickets((prev) => prev.map((t) => t.id === id ? { ...t, status, ...touch() } : t));
     logActivity("update", `moved "${ticket.title}" to ${status.replace("_", " ")}`, ticket.biz);
   };
   const remove = (id) => {
@@ -1236,7 +1240,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   const reassign = (id, assignee) => {
     const ticket = tickets.find((t) => t.id === id);
     if (!ticket || ticket.assignee === assignee) return;
-    setTickets((prev) => prev.map((t) => t.id === id ? { ...t, assignee } : t));
+    setTickets((prev) => prev.map((t) => t.id === id ? { ...t, assignee, ...touch() } : t));
     if (assignee) {
       onTicketAssigned({ ...ticket, assignee });
       logActivity("assign", `assigned "${ticket.title}" to ${assignee}`, ticket.biz);
@@ -1249,10 +1253,36 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     setTickets((prev) => prev.map((t) => t.id !== id ? t : {
       ...t,
       comments: [...(t.comments || []), { id: `c${Date.now()}`, by, text, at: new Date().toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) }],
+      ...touch(),
     }));
     logActivity("comment", `commented on "${ticket.title}"`, ticket.biz);
   };
-  const updateTicket = (id, field, val) => setTickets((prev) => prev.map((t) => t.id === id ? { ...t, [field]: val } : t));
+
+  const startEdit = (t) => {
+    setEditForm({ biz: t.biz, type: t.type, title: t.title, details: t.details || "", submitter: t.submitter || "", assignee: t.assignee || "", priority: t.priority || "medium", dueDate: t.dueDate || "", status: t.status });
+    setEditingTicket(t);
+  };
+  const saveEdit = () => {
+    if (!editForm.title.trim()) return;
+    const id = editingTicket.id;
+    const prevAssignee = editingTicket.assignee;
+    setTickets((prev) => prev.map((t) => t.id === id ? { ...t, ...editForm, ...touch() } : t));
+    logActivity("update", `updated ticket "${editForm.title}"`, editForm.biz);
+    if (editForm.assignee && editForm.assignee !== prevAssignee) {
+      onTicketAssigned({ id, title: editForm.title, biz: editForm.biz, assignee: editForm.assignee });
+      logActivity("assign", `assigned "${editForm.title}" to ${editForm.assignee}`, editForm.biz);
+    }
+    setEditingTicket(null);
+    setEditForm(null);
+  };
+
+  const requestDelete = (t) => { setDeleteTarget(t); setDeleteText(""); };
+  const confirmDelete = () => {
+    if (deleteText.trim().toUpperCase() !== "DELETE") return;
+    remove(deleteTarget.id);
+    setDeleteTarget(null);
+    setDeleteText("");
+  };
 
   const columns = [
     { id: "open", label: "Open", accent: C.brass },
@@ -1283,6 +1313,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     assignee: (t) => (t.assignee || "￿").toLowerCase(),
     dueDate: (t) => t.dueDate || "9999-99-99",
     submitter: (t) => (t.submitter || "￿").toLowerCase(),
+    updatedAt: (t) => t.updatedAt || "",
   };
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -1422,7 +1453,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
       {view === "table" && (
         <Card className="wmx-body" style={{ padding: 6, fontSize: 13 }}>
           <div className="wmx-rtable-head wmx-tickets-cols">
-            {[["title", "Title"], ["biz", "Business"], ["type", "Type"], ["priority", "Priority"], ["status", "Status"], ["assignee", "Assignee"], ["dueDate", "Due"], ["submitter", "Submitter"]].map(([key, label]) => (
+            {[["title", "Title"], ["biz", "Business"], ["type", "Type"], ["priority", "Priority"], ["status", "Status"], ["assignee", "Assignee"], ["dueDate", "Due"], ["submitter", "Submitter"], ["updatedAt", "Updated"]].map(([key, label]) => (
               <div key={key} onClick={() => toggleSort(key)} style={{ cursor: "pointer", userSelect: "none" }}>
                 {label}{sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
               </div>
@@ -1432,10 +1463,108 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
           </div>
           {sortedForTable.length === 0 && <EmptyState title="No tickets" subtitle="Try a different filter or search." compact />}
           {sortedForTable.map((t) => (
-            <TicketTableRow key={t.id} t={t} assignableNames={assignableNames} canDelete={canDelete} userName={userName} contacts={contacts}
-              statusMeta={statusMeta} onUpdate={updateTicket} onReassign={reassign} onStatus={setStatus} onRemove={remove} onAddComment={addComment} />
+            <TicketTableRow key={t.id} t={t} canDelete={canDelete} userName={userName}
+              statusMeta={statusMeta} onEdit={startEdit} onDeleteRequest={requestDelete} onAddComment={addComment} />
           ))}
         </Card>
+      )}
+
+      {editingTicket && editForm && (
+        <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}
+          onClick={() => { setEditingTicket(null); setEditForm(null); }}>
+          <Card style={{ padding: 24, maxWidth: 480, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div className="wmx-display" style={{ fontSize: 17, color: C.ink, marginBottom: 16 }}>Edit ticket</div>
+            <div className="wmx-form-grid" style={{ gap: 12 }}>
+              <FormField label="Business">
+                <select value={editForm.biz} onChange={(e) => setEditForm({ ...editForm, biz: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  {BUSINESSES.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Type">
+                <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  {TICKET_TYPES.map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Priority">
+                <select value={editForm.priority} onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  {["high", "medium", "low"].map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Status">
+                <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  {columns.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Deadline">
+                <input type="date" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+              </FormField>
+              <FormField label="Assign to">
+                <select value={editForm.assignee} onChange={(e) => setEditForm({ ...editForm, assignee: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
+                  <option value="">Unassigned</option>
+                  {assignableNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Title" span={2}>
+                <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+              </FormField>
+              <FormField label="Your name">
+                <input placeholder="Submitted by" value={editForm.submitter} onChange={(e) => setEditForm({ ...editForm, submitter: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+              </FormField>
+              <FormField label="Details" span={2}>
+                <textarea placeholder="Any extra context" value={editForm.details} onChange={(e) => setEditForm({ ...editForm, details: e.target.value })} rows={3}
+                  className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6, resize: "vertical", fontFamily: "inherit" }} />
+              </FormField>
+            </div>
+            {editingTicket.updatedAt && (
+              <div className="wmx-body" style={{ fontSize: 11, color: C.sub, marginTop: 12 }}>
+                Last updated {formatTimestamp(editingTicket.updatedAt)}{editingTicket.updatedBy ? ` by ${editingTicket.updatedBy}` : ""}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+              <button onClick={saveEdit} disabled={!editForm.title.trim()} className="wmx-body wmx-focus"
+                style={{ background: editForm.title.trim() ? C.ink : C.line, color: editForm.title.trim() ? "#fff" : C.sub, border: "none", borderRadius: 6, cursor: editForm.title.trim() ? "pointer" : "default", fontSize: 13, padding: "9px 16px", fontWeight: 600 }}>
+                Save changes
+              </button>
+              <button onClick={() => { setEditingTicket(null); setEditForm(null); }} className="wmx-body wmx-focus"
+                style={{ background: "none", border: `1px solid ${C.line}`, borderRadius: 6, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600, color: C.ink }}>
+                Cancel
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}
+          onClick={() => setDeleteTarget(null)}>
+          <Card style={{ padding: 24, maxWidth: 400, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <AlertTriangle size={18} color={C.warn} />
+              <div className="wmx-display" style={{ fontSize: 16, color: C.ink }}>Delete this ticket?</div>
+            </div>
+            <div className="wmx-body" style={{ fontSize: 13, color: C.sub, marginBottom: 14 }}>
+              "{deleteTarget.title}" will be permanently deleted. This can't be undone.
+            </div>
+            <FormField label='Type "DELETE" to confirm'>
+              <input value={deleteText} onChange={(e) => setDeleteText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmDelete()}
+                placeholder="DELETE" autoFocus className="wmx-body wmx-focus" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }} />
+            </FormField>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={confirmDelete} disabled={deleteText.trim().toUpperCase() !== "DELETE"} className="wmx-body wmx-focus"
+                style={{
+                  background: deleteText.trim().toUpperCase() === "DELETE" ? C.warn : C.line,
+                  color: deleteText.trim().toUpperCase() === "DELETE" ? "#fff" : C.sub,
+                  border: "none", borderRadius: 6, cursor: deleteText.trim().toUpperCase() === "DELETE" ? "pointer" : "default", fontSize: 13, padding: "9px 16px", fontWeight: 600,
+                }}>
+                Delete ticket
+              </button>
+              <button onClick={() => setDeleteTarget(null)} className="wmx-body wmx-focus"
+                style={{ background: "none", border: `1px solid ${C.line}`, borderRadius: 6, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600, color: C.ink }}>
+                Cancel
+              </button>
+            </div>
+          </Card>
+        </div>
       )}
     </>
   );
