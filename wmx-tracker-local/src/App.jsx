@@ -1231,6 +1231,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteText, setDeleteText] = useState("");
   const [importMsg, setImportMsg] = useState(null);
+  const [showImportGuide, setShowImportGuide] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -1360,6 +1361,13 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     const rows = filtered.map((t) => [t.id, t.title, bizById(t.biz).name, t.type, t.priority || "medium", t.status, t.assignee || "", t.dueDate || "", t.submitter || "", t.details || ""]);
     downloadCsv(`wmx-tickets-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(TICKET_CSV_HEADERS, rows));
   };
+  const downloadSampleCsv = () => {
+    const rows = [
+      ["", "Design Q4 campaign assets", "Watermark", "campaign", "high", "open", "Jeff", "2026-10-15", "Aly", "Kickoff deck + 3 social templates"],
+      ["", "Fix broken footer link", "Garrison House", "issue", "medium", "in_progress", "", "", "Jason", "Reported by a guest via the contact form"],
+    ];
+    downloadCsv("wmx-tickets-template.csv", toCsv(TICKET_CSV_HEADERS, rows));
+  };
 
   const triggerImport = () => fileInputRef.current?.click();
   const handleImportFile = async (e) => {
@@ -1402,6 +1410,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
       return next;
     });
     logActivity("create", `imported ${patches.length} ticket row(s) from CSV (${created} new, ${updated} updated)`);
+    setShowImportGuide(false);
     setImportMsg({ text: `Imported ${created} new, updated ${updated}.`, ok: true });
     setTimeout(() => setImportMsg(null), 5000);
   };
@@ -1423,7 +1432,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
             <Download size={14} /> Export
           </button>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleImportFile} style={{ display: "none" }} />
-          <button onClick={triggerImport} title="Import tickets from a CSV file (matching by ID updates existing tickets)" className="wmx-body wmx-focus"
+          <button onClick={() => setShowImportGuide(true)} title="Import tickets from a CSV file" className="wmx-body wmx-focus"
             style={{ display: "flex", alignItems: "center", gap: 6, background: "none", color: C.ink, border: `1px solid ${C.line}`, borderRadius: 8, cursor: "pointer", fontSize: 12.5, padding: "8px 14px", fontWeight: 600 }}>
             <Upload size={14} /> Import
           </button>
@@ -1441,6 +1450,44 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
           borderRadius: 8, padding: "8px 14px", marginBottom: 12,
         }}>
           {importMsg.text}
+        </div>
+      )}
+
+      {showImportGuide && (
+        <div className="wmx-body" style={{ position: "fixed", inset: 0, background: "rgba(20,18,12,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 100 }}
+          onClick={() => setShowImportGuide(false)}>
+          <Card style={{ padding: 24, maxWidth: 520, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <div className="wmx-display" style={{ fontSize: 17, color: C.ink, marginBottom: 12 }}>Import tickets from CSV</div>
+            <div className="wmx-body" style={{ fontSize: 12.5, color: C.sub, lineHeight: 1.7, marginBottom: 16 }}>
+              <div style={{ marginBottom: 8 }}>
+                Columns, in this order: <b style={{ color: C.ink }}>ID, Title, Business, Type, Priority, Status, Assignee, Due Date, Submitter, Details</b>.
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                <li><b style={{ color: C.ink }}>ID</b> — leave blank to create a new ticket. Fill in an ID from a previous Export to update that ticket instead of creating a duplicate.</li>
+                <li><b style={{ color: C.ink }}>Title</b> — required; rows with no title are skipped.</li>
+                <li><b style={{ color: C.ink }}>Business</b> — Watermark, Manolo Roofing, Garrison House, or Twofold (anything else defaults to Watermark).</li>
+                <li><b style={{ color: C.ink }}>Type</b> — {TICKET_TYPES.join(", ")} (defaults to request).</li>
+                <li><b style={{ color: C.ink }}>Priority</b> — high, medium, or low (defaults to medium).</li>
+                <li><b style={{ color: C.ink }}>Status</b> — open, in_progress, or resolved (defaults to open).</li>
+                <li><b style={{ color: C.ink }}>Assignee</b> — match a teammate's name exactly to notify them on import; anything else is just stored as text.</li>
+                <li><b style={{ color: C.ink }}>Due Date</b> — YYYY-MM-DD, or leave blank.</li>
+              </ul>
+            </div>
+            <button onClick={downloadSampleCsv} className="wmx-body wmx-focus"
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "none", color: C.ink, border: `1px solid ${C.line}`, borderRadius: 8, cursor: "pointer", fontSize: 12.5, padding: "8px 14px", fontWeight: 600, marginBottom: 18 }}>
+              <Download size={14} /> Download sample CSV
+            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={triggerImport} className="wmx-body wmx-focus"
+                style={{ display: "flex", alignItems: "center", gap: 6, background: C.ink, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600 }}>
+                <Upload size={14} /> Choose CSV file…
+              </button>
+              <button onClick={() => setShowImportGuide(false)} className="wmx-body wmx-focus"
+                style={{ background: "none", border: `1px solid ${C.line}`, borderRadius: 6, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600, color: C.ink }}>
+                Cancel
+              </button>
+            </div>
+          </Card>
         </div>
       )}
 

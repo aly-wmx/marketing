@@ -25,7 +25,7 @@ A real, running copy of the WMX tracker with:
 - **Search on Stack, SaaS & Billing, and KPIs** — matches Tickets' search; KPIs search also auto-expands any category with a match.
 - **Tickets table view** — a Board/Table toggle next to "New ticket"; Table lists every filtered ticket as one sortable, word-wrapping grid (click a column header to sort by it) instead of three drag-and-drop columns — better for scanning a long list, while the board stays the default for day-to-day status moves.
 - **Edit and delete from the table** — each row's Actions column has an edit icon (opens a popup with every field, including status — saving stamps a real "last updated" timestamp + who) and a delete icon that requires typing DELETE to confirm before anything is removed.
-- **Import/Export tickets as CSV** — Export downloads the currently filtered tickets; Import reads a CSV back in, matching rows to existing tickets by their ID column (updating them) and creating new tickets for any row without a recognized ID — so a spreadsheet round-trip (bulk edit in Excel/Sheets, re-import) works without hand-editing the app.
+- **Import/Export tickets as CSV** — Export downloads the currently filtered tickets; Import reads a CSV back in, matching rows to existing tickets by their ID column (updating them) and creating new tickets for any row without a recognized ID — so a spreadsheet round-trip (bulk edit in Excel/Sheets, re-import) works without hand-editing the app. The Import button opens a guide (column meanings, accepted values, a "Download sample CSV" template) before you pick a file, so the format doesn't have to be guessed or reverse-engineered from an export.
 
 ## 1. Create a Supabase project (free tier is fine)
 
