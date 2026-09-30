@@ -23,6 +23,7 @@ A real, running copy of the WMX tracker with:
 - **SaaS spend by business** — chips above the SaaS & Billing table show monthly spend touching each business (a shared tool counts fully toward each business it serves, so these don't sum back to the total — they answer "how much is being spent on this business's stack," not "what's this business's exclusive share").
 - **Marketing-shaped ticket types** — Campaign and Content join Request/Question/Idea/Issue, so deadline-driven marketing work isn't lumped in with generic requests.
 - **Search on Stack, SaaS & Billing, and KPIs** — matches Tickets' search; KPIs search also auto-expands any category with a match.
+- **Tickets table view** — a Board/Table toggle next to "New ticket"; Table lists every filtered ticket as one sortable, fully editable grid (click a column header to sort by it) instead of three drag-and-drop columns — better for scanning or bulk-editing a long list, while the board stays the default for day-to-day status moves.
 
 ## 1. Create a Supabase project (free tier is fine)
 

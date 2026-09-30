@@ -53,6 +53,7 @@ const FONTS = `
 .wmx-saas-cols{grid-template-columns:2fr 0.8fr 1.6fr 2fr 32px;}
 .wmx-kpi-cols{grid-template-columns:2fr 0.9fr 0.9fr 0.9fr 1fr 1.4fr;}
 .wmx-social-cols{grid-template-columns:1.3fr 1fr 0.9fr 0.7fr 0.9fr 0.7fr;}
+.wmx-tickets-cols{grid-template-columns:1.8fr 1fr 0.9fr 0.9fr 1fr 1fr 0.9fr 1fr 0.7fr 56px;}
 .wmx-mobile-topbar{display:none;}
 .wmx-mobile-backdrop{display:none;}
 @media (max-width: 860px){
@@ -73,7 +74,7 @@ const FONTS = `
 }
 @media (max-width: 720px){
   .wmx-rtable-head{display:none;}
-  .wmx-stack-cols,.wmx-saas-cols,.wmx-kpi-cols,.wmx-social-cols{grid-template-columns:1fr;}
+  .wmx-stack-cols,.wmx-saas-cols,.wmx-kpi-cols,.wmx-social-cols,.wmx-tickets-cols{grid-template-columns:1fr;}
   .wmx-rtable-row{gap:10px;padding:14px;}
   .wmx-rtable-label{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:0.4px;color:${C.sub};font-weight:600;margin-bottom:3px;}
 }
@@ -684,6 +685,7 @@ function TeamTab({ team, setTeam, canEdit, logActivity }) {
 }
 
 const cellInput = { width: "100%", border: "none", background: "transparent", fontSize: 13, padding: "4px 2px", color: C.ink };
+const selectCell = { width: "100%", border: "none", background: "transparent", fontSize: 12.5, padding: "4px 2px", cursor: "pointer", color: C.ink };
 
 function StackTab({ stack, setStack, logActivity }) {
   const [search, setSearch] = useState("");
@@ -1087,6 +1089,109 @@ function TicketCard({ t, col, nextCol, canDelete, userName, assignableNames, con
   );
 }
 
+const TICKET_TYPES = ["campaign", "content", "request", "question", "idea", "issue"];
+
+// Table-view counterpart to TicketCard: same data, same actions (status,
+// assignee, comments, email, delete), but every field is an inline
+// input/select instead of a static line — a dense list for scanning/sorting
+// a lot of tickets at once instead of the board's one-glance-per-card view.
+function TicketTableRow({ t, assignableNames, canDelete, userName, contacts, statusMeta, onUpdate, onReassign, onStatus, onRemove, onAddComment }) {
+  const [expanded, setExpanded] = useState(false);
+  const [draft, setDraft] = useState("");
+  const b = bizById(t.biz);
+  const overdue = !!t.dueDate && t.status !== "resolved" && t.dueDate < new Date().toISOString().slice(0, 10);
+  const comments = t.comments || [];
+  const assigneeEmail = t.assignee ? contacts[t.assignee] : null;
+  const mailto = `mailto:${assigneeEmail || "ops@wmx.com"}?subject=${encodeURIComponent(`[${t.type}] ${t.title}`)}&body=${encodeURIComponent(`${t.details}\n\n— ${t.submitter || "Unknown"} (${b.name})`)}`;
+
+  const submitComment = () => {
+    if (!draft.trim()) return;
+    onAddComment(t.id, draft.trim(), userName || "Unknown");
+    setDraft("");
+  };
+
+  return (
+    <>
+      <div className="wmx-rtable-row wmx-tickets-cols">
+        <div><span className="wmx-rtable-label">Title</span>
+          <input value={t.title} onChange={(e) => onUpdate(t.id, "title", e.target.value)} className="wmx-focus" style={{ ...cellInput, fontWeight: 600 }} />
+        </div>
+        <div><span className="wmx-rtable-label">Business</span>
+          <select value={t.biz} onChange={(e) => onUpdate(t.id, "biz", e.target.value)} className="wmx-body wmx-focus" style={selectCell}>
+            {BUSINESSES.map((biz) => <option key={biz.id} value={biz.id}>{biz.name}</option>)}
+          </select>
+        </div>
+        <div><span className="wmx-rtable-label">Type</span>
+          <select value={t.type} onChange={(e) => onUpdate(t.id, "type", e.target.value)} className="wmx-body wmx-focus" style={selectCell}>
+            {TICKET_TYPES.map((ty) => <option key={ty} value={ty}>{ty[0].toUpperCase() + ty.slice(1)}</option>)}
+          </select>
+        </div>
+        <div><span className="wmx-rtable-label">Priority</span>
+          <select value={t.priority || "medium"} onChange={(e) => onUpdate(t.id, "priority", e.target.value)} className="wmx-body wmx-focus"
+            style={{ ...selectCell, color: PRIORITY_COLOR[t.priority] || C.brass, fontWeight: 600 }}>
+            {["high", "medium", "low"].map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+          </select>
+        </div>
+        <div><span className="wmx-rtable-label">Status</span>
+          <select value={t.status} onChange={(e) => onStatus(t.id, e.target.value)} className="wmx-body wmx-focus"
+            style={{ ...selectCell, color: statusMeta[t.status]?.accent || C.ink, fontWeight: 600 }}>
+            {Object.values(statusMeta).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </div>
+        <div><span className="wmx-rtable-label">Assignee</span>
+          <select value={t.assignee || ""} onChange={(e) => onReassign(t.id, e.target.value)} className="wmx-body wmx-focus" style={selectCell}>
+            <option value="">Unassigned</option>
+            {assignableNames.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        <div><span className="wmx-rtable-label">Due</span>
+          <input type="date" value={t.dueDate || ""} onChange={(e) => onUpdate(t.id, "dueDate", e.target.value)} className="wmx-focus"
+            style={{ ...cellInput, color: overdue ? C.warn : C.ink, fontWeight: overdue ? 700 : 400 }} />
+        </div>
+        <div><span className="wmx-rtable-label">Submitter</span>
+          <input value={t.submitter || ""} onChange={(e) => onUpdate(t.id, "submitter", e.target.value)} placeholder="—" className="wmx-focus" style={cellInput} />
+        </div>
+        <div><span className="wmx-rtable-label">Comments</span>
+          <button onClick={() => setExpanded((s) => !s)} aria-label={`${comments.length} comments — toggle`} className="wmx-body wmx-focus wmx-icon-btn"
+            style={{ fontSize: 11, color: C.brass, background: "none", border: "none", cursor: "pointer", padding: "3px 7px", fontWeight: 600, borderRadius: 999 }}>
+            {comments.length > 0 ? comments.length : "+"}
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+          <a href={mailto} aria-label={`Email ${t.assignee || "ops"}`} title={`Email ${t.assignee || "ops"}`}
+            className="wmx-focus wmx-icon-btn" style={{ display: "flex", padding: 4, color: C.brass }}>
+            <Mail size={13} />
+          </a>
+          {canDelete && (
+            <button onClick={() => onRemove(t.id)} aria-label={`Delete ticket "${t.title}"`} title="Delete ticket"
+              className="wmx-focus wmx-icon-btn" style={{ border: "none", cursor: "pointer", padding: 4 }}>
+              <Trash2 size={13} color={C.sub} />
+            </button>
+          )}
+        </div>
+      </div>
+      {expanded && (
+        <div className="wmx-body" style={{ padding: "0 14px 12px", borderBottom: `1px solid ${C.line}` }}>
+          {comments.map((c) => (
+            <div key={c.id} style={{ marginBottom: 6 }}>
+              <div className="wmx-body" style={{ fontSize: 11, color: C.ink }}><b>{c.by}</b> <span style={{ color: C.sub }}>· {c.at}</span></div>
+              <div className="wmx-body" style={{ fontSize: 12, color: C.ink }}>{c.text}</div>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+            <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submitComment()}
+              placeholder="Add a comment…" className="wmx-body wmx-focus" style={{ flex: 1, padding: 6, border: `1px solid ${C.line}`, borderRadius: 6, fontSize: 12 }} />
+            <button onClick={submitComment} className="wmx-body wmx-focus"
+              style={{ fontSize: 11, background: C.ink, color: "#fff", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}>
+              Post
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAssigned, canDelete, logActivity, showForm, setShowForm }) {
   const blankForm = () => ({ biz: "wm", type: "question", title: "", details: "", submitter: userName || "", assignee: "", priority: "medium", dueDate: "" });
   const [form, setForm] = useState(blankForm);
@@ -1096,6 +1201,9 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
   const [contacts, setContacts] = useState({});
+  const [view, setView] = useState("board");
+  const [sortKey, setSortKey] = useState("priority");
+  const [sortDir, setSortDir] = useState("asc");
 
   useEffect(() => {
     let cancelled = false;
@@ -1144,12 +1252,15 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     }));
     logActivity("comment", `commented on "${ticket.title}"`, ticket.biz);
   };
+  const updateTicket = (id, field, val) => setTickets((prev) => prev.map((t) => t.id === id ? { ...t, [field]: val } : t));
 
   const columns = [
     { id: "open", label: "Open", accent: C.brass },
     { id: "in_progress", label: "In Progress", accent: C.navy },
     { id: "resolved", label: "Resolved", accent: C.pine },
   ];
+  const statusMeta = Object.fromEntries(columns.map((c) => [c.id, c]));
+  const TICKET_STATUS_ORDER = { open: 0, in_progress: 1, resolved: 2 };
 
   const filtered = tickets.filter((t) =>
     (filterBiz === "all" || t.biz === filterBiz) &&
@@ -1163,13 +1274,45 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
     return a.dueDate ? -1 : b.dueDate ? 1 : 0;
   });
 
+  const TABLE_SORT_VALUE = {
+    title: (t) => t.title.toLowerCase(),
+    biz: (t) => bizById(t.biz).name.toLowerCase(),
+    type: (t) => t.type,
+    priority: (t) => PRIORITY_ORDER[t.priority] ?? 1,
+    status: (t) => TICKET_STATUS_ORDER[t.status] ?? 0,
+    assignee: (t) => (t.assignee || "￿").toLowerCase(),
+    dueDate: (t) => t.dueDate || "9999-99-99",
+    submitter: (t) => (t.submitter || "￿").toLowerCase(),
+  };
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+  const sortedForTable = [...filtered].sort((a, b) => {
+    const getVal = TABLE_SORT_VALUE[sortKey] || TABLE_SORT_VALUE.priority;
+    const av = getVal(a), bv = getVal(b);
+    if (av < bv) return sortDir === "asc" ? -1 : 1;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+
   return (
     <>
       <PageHeader eyebrow="Shared board · visible to everyone with this link" title="Tickets" right={
-        <button onClick={() => setShowForm((s) => !s)} className="wmx-body wmx-focus"
-          style={{ display: "flex", alignItems: "center", gap: 6, background: C.ink, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600 }}>
-          <Plus size={15} /> New ticket
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
+            {[["board", "Board"], ["table", "Table"]].map(([v, label]) => (
+              <button key={v} onClick={() => setView(v)} className="wmx-body wmx-focus"
+                style={{ fontSize: 12.5, fontWeight: 600, padding: "8px 14px", border: "none", cursor: "pointer", background: view === v ? C.ink : "transparent", color: view === v ? "#fff" : C.ink }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setShowForm((s) => !s)} className="wmx-body wmx-focus"
+            style={{ display: "flex", alignItems: "center", gap: 6, background: C.ink, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, padding: "9px 16px", fontWeight: 600 }}>
+            <Plus size={15} /> New ticket
+          </button>
+        </div>
       } />
 
       {showForm && (
@@ -1185,7 +1328,7 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
               </FormField>
               <FormField label="Type">
                 <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="wmx-body" style={{ padding: 8, border: `1px solid ${C.line}`, borderRadius: 6 }}>
-                  {["campaign", "content", "request", "question", "idea", "issue"].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+                  {TICKET_TYPES.map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
                 </select>
               </FormField>
               <FormField label="Priority">
@@ -1240,39 +1383,60 @@ function TicketsTab({ tickets, setTickets, assignableNames, userName, onTicketAs
         </select>
       </div>
 
-      <div className="wmx-ticket-board">
-        {columns.map((col) => {
-          const items = sortColumn(filtered.filter((t) => t.status === col.id));
-          return (
-            <div key={col.id}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <span className="wmx-display" style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: 0.6, color: col.accent }}>{col.label}</span>
-                <span className="wmx-body" style={{ fontSize: 11, color: C.sub, background: C.line, borderRadius: 999, padding: "1px 7px" }}>{items.length}</span>
+      {view === "board" && (
+        <div className="wmx-ticket-board">
+          {columns.map((col) => {
+            const items = sortColumn(filtered.filter((t) => t.status === col.id));
+            return (
+              <div key={col.id}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span className="wmx-display" style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: 0.6, color: col.accent }}>{col.label}</span>
+                  <span className="wmx-body" style={{ fontSize: 11, color: C.sub, background: C.line, borderRadius: 999, padding: "1px 7px" }}>{items.length}</span>
+                </div>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.id); }}
+                  onDragLeave={() => setDragOverCol((c) => (c === col.id ? null : c))}
+                  onDrop={(e) => { e.preventDefault(); setDragOverCol(null); setStatus(e.dataTransfer.getData("text/plain"), col.id); }}
+                  style={{
+                    display: "flex", flexDirection: "column", gap: 10, minHeight: 60, borderRadius: 8, padding: 4, margin: -4,
+                    outline: dragOverCol === col.id ? `2px dashed ${col.accent}` : "2px dashed transparent", outlineOffset: -2,
+                    transition: "outline-color .1s",
+                  }}>
+                  {items.map((t) => {
+                    const nextCol = col.id === "open" ? "in_progress" : col.id === "in_progress" ? "resolved" : null;
+                    return (
+                      <TicketCard key={t.id} t={t} col={col} nextCol={nextCol} canDelete={canDelete} userName={userName} assignableNames={assignableNames} contacts={contacts}
+                        dragging={draggingId === t.id}
+                        onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)}
+                        onStatus={setStatus} onRemove={remove} onAddComment={addComment} onReassign={reassign} />
+                    );
+                  })}
+                  {items.length === 0 && <EmptyState title="Empty" subtitle="Drop a ticket here" compact />}
+                </div>
               </div>
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOverCol(col.id); }}
-                onDragLeave={() => setDragOverCol((c) => (c === col.id ? null : c))}
-                onDrop={(e) => { e.preventDefault(); setDragOverCol(null); setStatus(e.dataTransfer.getData("text/plain"), col.id); }}
-                style={{
-                  display: "flex", flexDirection: "column", gap: 10, minHeight: 60, borderRadius: 8, padding: 4, margin: -4,
-                  outline: dragOverCol === col.id ? `2px dashed ${col.accent}` : "2px dashed transparent", outlineOffset: -2,
-                  transition: "outline-color .1s",
-                }}>
-                {items.map((t) => {
-                  const nextCol = col.id === "open" ? "in_progress" : col.id === "in_progress" ? "resolved" : null;
-                  return (
-                    <TicketCard key={t.id} t={t} col={col} nextCol={nextCol} canDelete={canDelete} userName={userName} assignableNames={assignableNames} contacts={contacts}
-                      dragging={draggingId === t.id}
-                      onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)}
-                      onStatus={setStatus} onRemove={remove} onAddComment={addComment} onReassign={reassign} />
-                  );
-                })}
-                {items.length === 0 && <EmptyState title="Empty" subtitle="Drop a ticket here" compact />}
+            );
+          })}
+        </div>
+      )}
+
+      {view === "table" && (
+        <Card className="wmx-body" style={{ padding: 6, fontSize: 13 }}>
+          <div className="wmx-rtable-head wmx-tickets-cols">
+            {[["title", "Title"], ["biz", "Business"], ["type", "Type"], ["priority", "Priority"], ["status", "Status"], ["assignee", "Assignee"], ["dueDate", "Due"], ["submitter", "Submitter"]].map(([key, label]) => (
+              <div key={key} onClick={() => toggleSort(key)} style={{ cursor: "pointer", userSelect: "none" }}>
+                {label}{sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            ))}
+            <div>Comments</div>
+            <div></div>
+          </div>
+          {sortedForTable.length === 0 && <EmptyState title="No tickets" subtitle="Try a different filter or search." compact />}
+          {sortedForTable.map((t) => (
+            <TicketTableRow key={t.id} t={t} assignableNames={assignableNames} canDelete={canDelete} userName={userName} contacts={contacts}
+              statusMeta={statusMeta} onUpdate={updateTicket} onReassign={reassign} onStatus={setStatus} onRemove={remove} onAddComment={addComment} />
+          ))}
+        </Card>
+      )}
     </>
   );
 }
